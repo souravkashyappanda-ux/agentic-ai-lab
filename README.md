@@ -4,10 +4,10 @@ A learning project for building a multi-tool AI agent incrementally with Python
 and the official Anthropic SDK. The eventual agent will compare purchase orders,
 invoices, and payment status.
 
-**Current checkpoint: Phase 1 — Python setup and Claude API connectivity.**
-The application sends one short prompt and reports the answer, token usage,
-request latency, and estimated cost. It includes one offline mocked test.
-Tool calling, databases, PDFs, and orchestration belong to later phases.
+**Current checkpoint: Phase 2 — basic tool calling, tested offline and live.**
+The Phase 1 example remains in `main.py`. Phase 2 adds a fictional purchase-order
+tool and a two-request demonstration in `tool_demo.py`. Database/PDF integration
+and general orchestration belong to later phases.
 
 ## Project files
 
@@ -20,8 +20,11 @@ agentic-ai-lab/
 ├── LEARNING.md        # Phase notes, actual usage, and lessons
 ├── README.md          # Setup and execution guide
 ├── main.py            # One live Claude request and usage reporting
+├── purchase_order.py  # Fictional purchase-order function and tool schema
 ├── requirements.txt   # Installed dependency snapshot
-└── test_main.py       # Offline success-path test
+├── test_main.py       # Phase 1 offline success-path test
+├── test_tool_demo.py  # Phase 2 mocked round-trip and validation tests
+└── tool_demo.py       # Request tool, execute locally, send result, get answer
 ```
 
 Local `.env` and `.venv/` are excluded from Git.
@@ -60,8 +63,8 @@ Run the offline test first:
 .\.venv\Scripts\python.exe -m pytest -q
 ```
 
-Expected: `1 passed`. The test mocks the SDK and environment loading; it makes no
-API call. Its token numbers are fixtures.
+Expected: `9 passed`. The tests mock the SDK and environment loading; they make
+no API calls. Their token numbers are fixtures.
 
 For one paid live request, run from the project root:
 
@@ -80,6 +83,15 @@ an estimated cost of USD 0.00002210. Actual usage can vary. `end_turn` means the
 answer finished normally; `max_tokens` means output reached its cap.
 
 ## Cost assumptions and limits
+
+For the Phase 2 demonstration, run `python tool_demo.py` from the activated
+environment after testing. A normal run makes two paid API requests: the first
+requests the tool; Python validates the arguments and reads fictional data;
+the second includes the original question, assistant tool request, and matching
+`tool_result`. The second request uses `tool_choice={"type": "none"}`. Per-request
+usage/cost and combined run cost are printed. This is a fixed round trip, not a
+general agent loop. Invalid inputs currently raise exceptions rather than being
+returned as tool errors. Run it only when ready to incur API usage.
 
 The example hardcodes short-prompt standard rates of USD 0.10 per million input
 tokens and USD 0.50 per million output tokens, checked on 2026-10-26 against

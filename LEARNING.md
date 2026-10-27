@@ -130,6 +130,132 @@ Setup began on 2026-10-26 with only an unvalidated `.venv` and no Git repository
 The first live call and passing mocked test are recorded above. Next: commit and
 push the Phase 1 checkpoint. Tool calling has not started.
 
+## Phase 2: Basic tool calling — started 2026-10-27
+
+- **Approval and status:** The learner approved starting Phase 2. Work is being
+  taught incrementally for the learner to execute. Phase 3 is not approved.
+- **First component:** A small `get_purchase_order(po_id)` function backed by
+  fictional in-memory data. The saved function is now present in
+  [purchase_order.py](purchase_order.py); the learner reported completing the
+  direct-call step, without pasting its successful output. No
+  database, registry, or general agent loop is introduced at this step.
+- **Planned request/response flow:** Send the user's question and tool schema to
+  Claude; receive a `tool_use` block; execute the approved Python function; send
+  a `tool_result` linked to the tool-use ID; receive the final text answer.
+  Claude requests execution; application code actually runs the function.
+- **Usage and spend:** The learner reported one Phase 2 live call from
+  [tool_demo.py](tool_demo.py): 473 input tokens, 57 output tokens, zero cache
+  creation/read and thinking tokens, 1.36-second request latency, and estimated
+  cost USD 0.00007580 using the Phase 1 short-prompt pricing assumptions.
+  Cumulative estimated spend across the two reported live calls is
+  USD 0.00009790. Unreported activity is unknown. Codex made no live call.
+  A full single-tool round trip will require two LLM requests.
+- **Token implications:** Tool schemas and tool results add input context. The
+  second request also resends the question and assistant tool-use message.
+- **Validation and failures:** The learner created the
+  `phase-2-basic-tool-calling` branch. An unfinished shell quote first caused a
+  continuation prompt; cancelling and closing the quote fixed that command.
+  Next, import failed because `purchase_order.py` was empty on disk. Saving the
+  function fixed the missing definition. Codex verified the saved source, but
+  has not executed it. No automated Phase 2 test has run yet.
+- **Additional failure and recovery:** Two attempts stopped with
+  `IndentationError: unexpected indent` before module execution, so those
+  attempts made no API requests. The learner corrected indentation and the
+  next attempt returned `stop_reason=tool_use`, requesting `get_purchase_order`
+  with `{"po_id": "PO-1001"}`. The saved program currently prints this request
+  without executing the function. Evidence is the learner's terminal output.
+- **Optimizations:** Plan to keep the fictional tool result small. No optimization
+  experiment has run and no savings are claimed.
+- **Learner experiment:** Call the Python function directly for a known and an
+  unknown PO ID, inspect the returned dictionary/error, then add its mocked LLM
+  integration in the following step. No API request is needed for this exercise.
+- **Next instruction:** Add a tool schema beside the function and print it as
+  JSON locally. This describes the callable to Claude; it does not execute it or
+  enforce runtime input validation. Schema creation and inspection are pending.
+- **Schema progress:** Codex has now inspected the saved `PURCHASE_ORDER_TOOL`
+  dictionary in `purchase_order.py`: it declares a required string `po_id` and
+  disallows additional properties. No execution or live-call result was supplied.
+- **Next incremental exercise:** Create `tool_demo.py` to send the schema in one
+  request and inspect response blocks, including tool name, input, and call ID.
+  The demonstration will not execute the function yet. Source creation, mocked
+  verification, and live usage measurements for this step remain pending.
+- **Exercise update:** The request-inspection step above is now completed and
+  measured. Next, import the function, check the requested tool name and input,
+  execute the function, and prepare a result linked to the tool-use ID. The
+  second model request and automated tool-flow tests are still pending.
+- **Interpretation:** Input usage rose from 21 in Phase 1 to 473 in this request,
+  but the prompts also differ. Tool definitions and API tool-use instructions
+  contribute input context; this is not a controlled measurement of schema cost
+  or an optimization comparison. No benchmark row or savings claim is warranted.
+- **Local execution code progress:** The learner has saved the function import,
+  tool-name check, argument validation, and direct function invocation in
+  `tool_demo.py`. Codex inspected the source; execution of this version has not
+  been reported. The next instruction adds a JSON tool result and the second API
+  request, preserving the original assistant content and matching tool-use ID.
+  This step remains unmeasured; no additional spend is added to the ledger.
+- **Round-trip scope failure and fix:** A later learner run completed the first
+  API request (1.19 seconds, estimated USD 0.00007580), then raised
+  `NameError: name 'messages' is not defined`. The continuation block was beneath
+  the module-level `if __name__ == "__main__"` guard, outside `main()`, whose
+  local variables it needed. Codex moved the guard to the file's end, keeping
+  the continuation inside `main()`, and added an early return for a direct
+  `end_turn` response. No global variables were introduced. No second API call
+  was reached in the failing run. Token counts for this latest call were not
+  included in the pasted excerpt and are not inferred from its cost.
+- **Updated reported spend:** Three reported paid requests across both phases
+  total an estimated USD 0.00017370. This includes the charged request in the
+  failed round trip, not just successful application runs. Unreported activity
+  remains unknown; this is not an account billing total.
+- **Offline regression verification:** Added
+  [test_tool_demo.py](test_tool_demo.py). It checks the two-request history,
+  matching tool-use ID, actual fictional tool result, combined cost arithmetic,
+  direct-answer early exit, invalid name/arguments, and truncated-response
+  rejection. SDK responses and mocked transport require no network or credentials.
+  `python -m pytest -q -p no:cacheprovider`: **9 passed in 3.33s** including the
+  Phase 1 test. Codex made no paid requests. The live two-request flow remains
+  awaiting learner execution; Phase 2 is not yet marked complete.
+
+### Phase 2 live completion and routing lesson
+
+The learner reported a successful full round trip after the scope fix:
+
+| Request | Input tokens | Output tokens | Request latency | Estimated USD |
+| --- | --- | --- | --- | --- |
+| Tool selection | 473 | 57 | 1.34 seconds | 0.00007580 |
+| Final answer after tool result | 590 | 45 | 1.06 seconds | 0.00008150 |
+| Successful run total | 1063 | 102 | 2.40 seconds summed request time | 0.00015730 |
+
+Both responses reported zero cache creation/read and thinking tokens. The first
+stopped with `tool_use`; Python executed the fictional lookup and sent the linked
+result. The second stopped with `end_turn` and answered that PO-1001's supplier is
+Demo Office Supplies, its amount is INR 15,000, and its status is approved.
+The summed request time is not an end-to-end run measurement.
+
+The learner also pasted the earlier failed run again; that is the same already
+recorded 1.19-second request, not an additional charge. Its complete pasted usage
+now confirms 473 input and 57 output tokens. Across five distinct reported API
+requests (one Phase 1, two earlier Phase 2 requests, and this successful pair),
+cumulative estimated spend is **USD 0.00033100**. Unreported account activity is
+unknown. No new live requests were made by Codex.
+
+**Routing lesson:** For this fixed question, application code can call
+`get_purchase_order("PO-1001")` directly and ask Claude only to explain the result.
+Model-driven tool selection is useful when natural-language requests may require
+different tools, arguments, or follow-up actions. It is an architectural choice,
+not a requirement to put an LLM before every function call. If no natural-language
+explanation is needed, the application can display the structured data directly.
+
+The observed selection request cost USD 0.00007580, but a direct-routing candidate
+has not been run. Its prompt/token count would differ, so net cost/latency savings
+and correctness are not yet measured. No benchmark comparison or improvement
+claim is recorded. A future controlled experiment can compare these approaches
+with the same questions and correctness rubric.
+
+**Status:** Phase 2's basic tool-calling implementation, offline tests, and learner
+live verification are complete. GitHub commit/push remains a learner checkpoint.
+Phase 3 still requires explicit approval. The earlier progress bullets record
+the intermediate states and are superseded by this completion entry.
+
 ## Future phase entry template
 
 For each phase, record:
