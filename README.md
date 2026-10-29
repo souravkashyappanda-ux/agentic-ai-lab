@@ -4,10 +4,14 @@ A learning project for building a multi-tool AI agent incrementally with Python
 and the official Anthropic SDK. The eventual agent will compare purchase orders,
 invoices, and payment status.
 
-**Current checkpoint: Phase 2 — basic tool calling, tested offline and live.**
+**Current checkpoint: Phase 3 — custom multi-tool loop, tested offline and live.**
+The loop uses two registered fictional tools, an iteration limit, a soft run-token
+budget, and per-request usage/latency/cost reporting. The learner's live trial
+completed in two LLM calls: 1,780 tokens, estimated USD 0.00025920, 4.34 seconds
+overall. This validates one fixture case, not an optimization benchmark.
 The Phase 1 example remains in `main.py`. Phase 2 adds a fictional purchase-order
-tool and a two-request demonstration in `tool_demo.py`. Database/PDF integration
-and general orchestration belong to later phases.
+tool and a two-request demonstration in `tool_demo.py`. Database/PDF/REST
+integration belongs to Phase 4 and requires learner approval.
 
 ## Project files
 
@@ -19,11 +23,20 @@ agentic-ai-lab/
 ├── BENCHMARKS.csv     # Header for future measured comparisons
 ├── LEARNING.md        # Phase notes, actual usage, and lessons
 ├── README.md          # Setup and execution guide
+├── agent_loop.py      # Iterative tool calling with request/output/token limits
+├── agent_runner.py    # Live entry point using one client and a 3,000-token soft budget
 ├── main.py            # One live Claude request and usage reporting
+├── payment_status.py  # Fictional payment-status function and schema
 ├── purchase_order.py  # Fictional purchase-order function and tool schema
 ├── requirements.txt   # Installed dependency snapshot
+├── test_agent_limits.py # Loop limits, errors, and multiple-tool tests
+├── test_agent_loop.py # Basic mocked agent round trip
+├── test_agent_runner.py # Offline runner startup and missing-key tests
 ├── test_main.py       # Phase 1 offline success-path test
+├── test_payment_status.py # Payment fixture and registry tests
 ├── test_tool_demo.py  # Phase 2 mocked round-trip and validation tests
+├── test_tool_registry.py # Input validation and registry tests
+├── tool_registry.py   # Schemas, functions, validators, and execution boundary
 └── tool_demo.py       # Request tool, execute locally, send result, get answer
 ```
 
@@ -63,7 +76,7 @@ Run the offline test first:
 .\.venv\Scripts\python.exe -m pytest -q
 ```
 
-Expected: `9 passed`. The tests mock the SDK and environment loading; they make
+Expected: `33 passed`. The tests mock the SDK and environment loading; they make
 no API calls. Their token numbers are fixtures.
 
 For one paid live request, run from the project root:
@@ -83,6 +96,14 @@ an estimated cost of USD 0.00002210. Actual usage can vary. `end_turn` means the
 answer finished normally; `max_tokens` means output reached its cap.
 
 ## Cost assumptions and limits
+
+For the current Phase 3 runner, execute `python agent_runner.py` after running
+the offline tests. It uses one client, at most four LLM requests, and a
+3,000-token soft threshold. The loop prints usage, request latency, and uncached
+request/run cost estimates; the runner prints the final answer and total runtime.
+Each execution incurs API usage. The threshold is checked after receiving usage,
+so it can be exceeded by a request. Cached usage disables the basic run-cost
+estimate rather than presenting an incomplete total.
 
 For the Phase 2 demonstration, run `python tool_demo.py` from the activated
 environment after testing. A normal run makes two paid API requests: the first
