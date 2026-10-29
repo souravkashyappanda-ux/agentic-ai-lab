@@ -256,6 +256,246 @@ live verification are complete. GitHub commit/push remains a learner checkpoint.
 Phase 3 still requires explicit approval. The earlier progress bullets record
 the intermediate states and are superseded by this completion entry.
 
+## Phase 3: Custom multi-tool agent loop — started 2026-10-28
+
+- **Approval and status:** The learner approved proceeding after Phase 2.
+  Workspace inspection shows a clean `main` tracking `origin/main`; the Phase 3
+  branch has not yet been created locally. Phase 4 is not approved.
+- **First component planned:** `tool_registry.py`, a small mapping from approved
+  tool names to Python function references, with a separate list of schemas for
+  Claude. The learner will create and inspect it before writing the loop.
+  No Phase 3 source has been created yet.
+- **Planned request/response flow:** Send question and tool schemas; append
+  assistant content; if `tool_use`, validate and execute all requested approved
+  tools and return linked results; repeat until `end_turn` or a budget limit.
+  Tool failures will become error results. Independent tools will execute
+  sequentially initially; parallel execution belongs to a later phase.
+- **Token implications:** Each iteration resends the accumulated context. Input
+  cost can grow even when new tool results are small. A per-response output cap,
+  iteration cap, and explicit accounting/budget checks must bound the loop.
+- **Usage and spend:** No Phase 3 API request has run. Phase 3 tokens, latency,
+  and cost are not measured. Cumulative estimated reported spend remains
+  USD 0.00033100; unreported activity is unknown. Codex has made no live call.
+- **Validation and failures:** Existing Phase 2 source and branch state inspected.
+  No Phase 3 tests or failures yet; registry creation and execution are pending.
+- **Optimizations:** Reuse one client and share loop code rather than duplicating
+  request logic. These are planned design changes, not measured token savings.
+- **Learner experiment:** Retrieve the function from the registry and call it
+  with PO-1001. Inspect that the dictionary stores a callable, not its result.
+  This requires no LLM call. Input validation and loop tests follow next.
+
+### Phase 3 registry progress
+
+Codex verified `tool_registry.py` contains `TOOL_SCHEMAS` and `TOOL_FUNCTIONS`,
+and the current branch is `phase-3-multi-tool-agent-loop`. The registry stores
+the function reference rather than invoking it. No direct-call output has been
+pasted, so successful execution is not inferred from source inspection.
+
+The next learner step adds a strict Pydantic input model and `execute_tool` to
+the registry. Pydantic 2.14.1 is already installed. This replaces repetitive
+manual argument checks with runtime validation, looks up only registered
+functions, and converts validation/execution failures into bounded structured
+results. Result dictionaries are application data; the loop will later wrap them
+in API `tool_result` blocks. Source creation and offline tests for this addition
+are pending. Phase 3 token usage and latency remain unmeasured, and no paid calls
+or additional estimated spend are recorded.
+
+### Phase 3 execution boundary progress
+
+The learner saved `PurchaseOrderInput` and `execute_tool` in
+[tool_registry.py](tool_registry.py), plus [test_tool_registry.py](test_tool_registry.py).
+Codex inspected the saved source: unknown names are rejected, strict Pydantic
+validation rejects malformed arguments, and execution failures return a generic
+error rather than exposing exception details. The broad execution exception
+handler deliberately hides internal errors from the model; detailed sanitized
+diagnostics are not implemented yet.
+
+Codex ran `python -m pytest -q -p no:cacheprovider`: **16 passed in 4.15s**.
+All SDK interactions were mocked; no `.env` read or live API call was needed.
+
+The next learner instruction introduces `agent_loop.py`: an injected SDK client,
+local conversation history, iteration/output limits, sequential handling of all
+tool-use blocks, linked error/success results, and an `end_turn` exit. This first
+loop increment does not yet implement a cumulative input/output token budget;
+iteration and per-response output limits alone are not a total token budget.
+Token accounting/budget enforcement and live execution remain later steps in
+Phase 3. The learner will create the loop and its offline test; no new LLM usage
+or measured optimization is recorded here.
+
+### Phase 3 loop progress and budget instruction
+
+The learner saved [agent_loop.py](agent_loop.py) and
+[test_agent_loop.py](test_agent_loop.py). Codex ran
+`python -m pytest -q -p no:cacheprovider`: **17 passed in 3.51s**. The added
+mocked test covers a tool request followed by a final answer and the linked
+result's contents. Multi-round, multi-call, and limit/error coverage is not yet
+complete. No live Phase 3 request has been made by Codex or reported by the learner.
+
+Next instruction: accumulate usage across requests, including base input, cache
+creation/read, and output without double-counting thinking/cache breakdowns;
+stop when the observed token threshold is reached, and lower each request's
+output cap to the remaining observed allowance. This is a **soft run budget**:
+usage arrives after the request, so a request's input can exceed the remaining
+allowance. It must not be described as a strict pre-request spending guarantee.
+The new budget code and limit tests are pending learner implementation. Cumulative
+estimated reported live spend remains USD 0.00033100. This adds a spending control,
+not a measured token optimization.
+
+### Phase 3 stopping rules and history verification
+
+Codex inspected the learner's saved token-budget implementation: reported input,
+output, cache creation, and cache read tokens accumulate across iterations; each
+request's output cap uses the remaining observed allowance; reaching the threshold
+raises before tool execution. This is a soft, post-response budget, not a strict
+spend cap. Under the current policy, even an `end_turn` answer is rejected if its
+reported usage reaches or exceeds the threshold. No token-counting preflight is
+implemented yet.
+
+Added [test_agent_limits.py](test_agent_limits.py) with nine offline cases covering:
+iteration exhaustion without wasted tool execution, cumulative usage, cache-token
+accounting, multiple tool requests with both success/error results, repeated tool
+rounds with one original question, truncated output, malformed tool-use responses,
+and invalid limit configuration. The multi-call test uses one available tool and
+one unavailable tool; it does not establish routing between two registered tools.
+
+Final validation: `python -m pytest -q -p no:cacheprovider` — **26 passed in 3.42s**.
+Mocks simulate LLM responses; no live API request or credentials are needed.
+No measured latency/cost optimization is claimed. Live Phase 3 usage remains
+unmeasured and cumulative estimated reported spend remains USD 0.00033100.
+Next: inspect these tests, then add a live runner with retries disabled and per-run
+latency/cost reporting. A second registered fictional tool is still needed to
+demonstrate successful multi-tool routing. Phase 3 remains in progress.
+
+### Phase 3 second-tool instruction
+
+The next learner step adds `payment_status.py` with a fictional, read-only
+`get_payment_status(po_id)` function. PO-1001 is unpaid in this fixture. Its
+schema and function will be registered alongside the purchase-order lookup;
+both accept the same strict `po_id` input model. No HTTP service, database,
+payment action, or new dependency is introduced. The existing loop should need
+no changes because it dispatches through the registry.
+
+Source creation, direct/registry execution, and payment-tool unit tests remain
+pending learner implementation. Adding a second schema will increase request
+context; its actual overhead and Phase 3 live cost remain unmeasured. Reported
+estimated spend remains USD 0.00033100. No benchmark or optimization is claimed.
+
+### Phase 3: two registered tools verified — 2026-10-29
+
+The payment-tool instruction had not yet been applied when work resumed. Codex
+added [payment_status.py](payment_status.py), registered its schema/function/input
+model in [tool_registry.py](tool_registry.py), and added
+[test_payment_status.py](test_payment_status.py). The fixture returns PO-1001 as
+unpaid, with amount paid 0 INR. Unknown PO IDs raise locally and are converted
+to generic execution errors by the registry. Both tools use the same strict
+`po_id` input model. No external payment service is contacted.
+
+The loop did not change. A new test in
+[test_agent_limits.py](test_agent_limits.py) supplies a mocked response requesting
+both registered functions, verifies both are actually executed locally, and
+checks that their successful results carry distinct matching IDs in the next
+request. The final answer is mocked, so this validates orchestration, not live
+model routing or answer quality. Direct function and registration tests were
+added as well.
+
+Validation: `python -m pytest -q -p no:cacheprovider` — **30 passed in 4.24s**.
+No failures reported in this step. No live API call, credential access, or new
+dependency was needed. Usage, latency, and cost for a live two-tool Phase 3 run
+remain unmeasured. Reported cumulative estimated spend remains USD 0.00033100.
+Adding a schema has context overhead; no optimization savings are claimed.
+
+Learner experiment: run `execute_tool('get_payment_status', {'po_id': 'PO-1001'})`
+locally, then inspect `test_two_registered_tools_in_one_round`. It demonstrates
+two Python function executions between two mocked LLM requests. Next: prepare
+the live runner and usage/latency/cost reporting before a paid trial. Phase 3
+remains in progress; Phase 4 is not approved.
+
+### Phase 3 runner and usage reporting — 2026-10-29
+
+The learner created [agent_runner.py](agent_runner.py) and
+[test_agent_runner.py](test_agent_runner.py): the runner loads local configuration,
+opens one SDK client with retries disabled and a 30-second timeout, and calls
+`run_agent` with four iterations and a 3,000-token soft budget. It asks for
+PO-1001's supplier, total amount, and payment status, then prints the answer and
+whole-run latency. The startup tests mock the loop and configuration, including
+the missing-key path. Live execution has not been reported.
+
+At the learner's explicit request, Codex added per-request `perf_counter` timing
+and cost reporting in [agent_loop.py](agent_loop.py). Cost is printed after usage
+is reported and before the budget guard, so a request that reaches the threshold
+is still accounted for. Each uncached request estimates USD cost using the
+short-prompt Haiku 5.5 rates checked on 2026-10-29 against the linked Anthropic
+model documentation above: USD 0.10 per million input and USD 0.50 per million
+output tokens. Estimated cumulative cost is maintained within a run only.
+
+The basic estimator deliberately reports cost unavailable for cached usage rather
+than applying ordinary input rates. Once that happens, subsequent uncached
+request costs can still print, but a partial amount is not presented as the full
+run total. Longer-prompt pricing tiers, taxes, conversion, persisted spending,
+and failed API requests without reported usage are outside this estimator.
+
+Tests use controlled clock values to verify separate 1.25-second and 0.75-second
+mock request latencies and fixture-derived costs of USD 0.00000350 and
+USD 0.00000700, totaling USD 0.00001050. Additional assertions verify cached
+usage does not produce an incomplete run-cost estimate. These values are test
+fixtures, not measured API performance or spending.
+
+Validation: `python -m pytest -q -p no:cacheprovider` — **33 passed in 3.34s**;
+`git diff --check` passed. No test failures, live API calls, or credential reads
+occurred in this step. The source's broad error handler and soft-budget limits
+remain as previously documented. Reported cumulative estimated live spend is
+still USD 0.00033100. No optimization benchmark or savings claim is added.
+
+Next learner experiment: run `python agent_runner.py` once, inspect the iteration
+stop reasons, tool results through the mocked tests, returned answer, per-call
+usage/cost, and total runtime. Record actual output before declaring Phase 3
+complete; Phase 4 remains unapproved.
+
+### Phase 3 live validation and completion — 2026-10-29
+
+**Status:** Phase 3 complete: implementation, 33 offline tests, and one successful
+learner-run live trial. GitHub commit/push is the next learner checkpoint. Phase 4
+requires explicit approval. This entry supersedes earlier in-progress notes.
+
+The learner ran `python agent_runner.py` and supplied the terminal output:
+
+| Iteration | Stop reason | Input tokens | Output tokens | LLM latency | Estimated USD |
+| --- | --- | --- | --- | --- | --- |
+| 1 | tool_use | 632 | 129 | 3.08 seconds | 0.00012770 |
+| 2 | end_turn | 945 | 74 | 1.08 seconds | 0.00013150 |
+| Total | Completed | 1577 | 203 | 4.16 seconds summed LLM time | 0.00025920 |
+
+Both requests reported zero cache creation/read and thinking tokens. The run used
+**1,780 tokens** against its 3,000-token soft threshold and finished in **4.34
+seconds** overall. The roughly 0.18-second difference from summed request times
+includes client setup/teardown, local execution, printing, and other processing;
+these timings are rounded, and the difference is not a measurement of tool time
+alone. The four-iteration cap was not reached.
+
+The reported final answer correctly states the fictional fixture values:
+supplier Demo Office Supplies, total INR 15,000, unpaid, amount paid INR 0.
+The expected user question and both schemas were sent; after the first assistant
+tool-use response, the loop appended linked tool results and obtained this final
+answer on the next request. Terminal logs do not expose individual live tool
+names, arguments, or results, so exact live routing cannot be independently
+reconstructed from this excerpt; the earlier offline tests verify two-tool
+execution and protocol construction. Persistent per-tool tracing belongs later.
+
+Cost check: `(1577 * 0.10 + 203 * 0.50) / 1,000,000 = USD 0.00025920`.
+Across seven distinct reported API requests from all phases, cumulative estimated
+live spend is now **USD 0.00059020** (prior USD 0.00033100 plus this run). Unreported
+activity, taxes, and currency conversion remain unknown. Codex made no live call.
+
+No failure occurred in this live trial. The soft budget can overshoot after a
+request and rejects answers at its threshold; cached-cost estimation and detailed
+tool-error diagnostics remain limited as documented. No before/after experiment
+has run, and no optimization claim or benchmark row is added.
+
+The learner experiment for Phase 3 is complete: inspect the two stop reasons,
+per-request usage, final fixture values, and whole-run time. A further exercise
+can debug the existing mocked repeated-tool test, observing history growth
+without spending credits. Commit/push this phase before beginning integrations.
+
 ## Future phase entry template
 
 For each phase, record:
