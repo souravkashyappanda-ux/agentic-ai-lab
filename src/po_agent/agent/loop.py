@@ -3,7 +3,7 @@ from time import perf_counter
 
 from anthropic import Anthropic
 
-from tool_registry import TOOL_SCHEMAS, execute_tool
+from po_agent.agent.registry import TOOL_SCHEMAS, execute_tool
 
 
 def run_agent(
@@ -11,6 +11,7 @@ def run_agent(
     question: str,
     max_iterations: int = 4,
     max_total_tokens: int = 2000,
+    tool_functions: dict | None = None,
 ) -> str:
     if max_iterations < 1:
         raise ValueError("max_iterations must be at least 1.")
@@ -112,7 +113,14 @@ def run_agent(
         tool_results = []
 
         for block in tool_calls:
-            result = execute_tool(block.name, block.input)
+            if tool_functions is None:
+                result = execute_tool(block.name, block.input)
+            else:
+                result = execute_tool(
+                    block.name,
+                    block.input,
+                    tool_functions=tool_functions,
+                )
 
             tool_results.append(
                 {

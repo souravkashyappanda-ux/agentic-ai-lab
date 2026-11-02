@@ -1,15 +1,17 @@
 from unittest.mock import patch
 
-from agent_runner import main
+from po_agent.cli import main
+from po_agent.db.purchase_orders import get_purchase_order_from_db
+from po_agent.agent.registry import TOOL_FUNCTIONS
 
 
 def test_runner_success(capsys):
     with (
-        patch("agent_runner.load_dotenv"),
-        patch("agent_runner.os.getenv", return_value="fake-test-key"),
-        patch("agent_runner.Anthropic") as constructor,
-        patch("agent_runner.run_agent", return_value="PO-1001 is unpaid.") as run,
-        patch("agent_runner.perf_counter", side_effect=[10.0, 12.0]),
+        patch("po_agent.cli.load_dotenv"),
+        patch("po_agent.cli.os.getenv", return_value="fake-test-key"),
+        patch("po_agent.cli.Anthropic") as constructor,
+        patch("po_agent.cli.run_agent", return_value="PO-1001 is unpaid.") as run,
+        patch("po_agent.cli.perf_counter", side_effect=[10.0, 12.0]),
     ):
         client = constructor.return_value.__enter__.return_value
 
@@ -28,6 +30,10 @@ def test_runner_success(capsys):
             ),
             max_iterations=4,
             max_total_tokens=3000,
+            tool_functions={
+                **TOOL_FUNCTIONS,
+                "get_purchase_order": get_purchase_order_from_db,
+            },
         )
 
     output = capsys.readouterr().out
@@ -37,9 +43,9 @@ def test_runner_success(capsys):
 
 def test_missing_key_does_not_create_client(capsys):
     with (
-        patch("agent_runner.load_dotenv"),
-        patch("agent_runner.os.getenv", return_value=None),
-        patch("agent_runner.Anthropic") as constructor,
+        patch("po_agent.cli.load_dotenv"),
+        patch("po_agent.cli.os.getenv", return_value=None),
+        patch("po_agent.cli.Anthropic") as constructor,
     ):
         main()
 

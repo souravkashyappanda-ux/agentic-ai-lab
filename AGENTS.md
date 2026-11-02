@@ -9,6 +9,20 @@ implications before implementing it. Ask for approval before starting the next
 phase. Phase 1 covers setup and one minimal Claude call only; tools, databases,
 RAG, and memory belong to later phases.
 
+## Repository layout
+
+Keep application code in the installable `src/po_agent` package: `agent/` for the
+loop and registry, `tools/` for tool schemas/fictional implementations, and `db/`
+for PostgreSQL access. Keep offline tests in `tests/unit`, local checks in
+`scripts`, earlier learning demos in `examples`, and provisioning SQL in
+`database`. Do not reintroduce root-level Python application modules.
+
+Use an editable install (`python -m pip install -e ".[dev]"`) and package imports,
+not `sys.path` modifications. Run tests with
+`python -m pytest -q -p no:cacheprovider`. Use `python -m po_agent` for a paid live
+run and `python -m scripts.check_database_tool` for a database check without LLM
+usage. Mock both external services and configuration loading in unit tests.
+
 ## Required learning record
 
 Update `LEARNING.md` at the end of every phase and whenever a phase is paused with

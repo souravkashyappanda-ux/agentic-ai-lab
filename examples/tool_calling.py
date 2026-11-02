@@ -5,7 +5,7 @@ from time import perf_counter
 from anthropic import Anthropic
 from dotenv import load_dotenv
 
-from purchase_order import PURCHASE_ORDER_TOOL, get_purchase_order
+from po_agent.tools.purchase_order import PURCHASE_ORDER_TOOL, get_purchase_order
 
 
 def main() -> None:

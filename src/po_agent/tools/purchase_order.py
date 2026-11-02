@@ -14,9 +14,9 @@ def get_purchase_order(po_id: str) -> dict[str, str|int]:
 PURCHASE_ORDER_TOOL = {
     "name": "get_purchase_order",
     "description": (
-        "Look up a fictional purchase order by ID. "
+        "Retrieve a purchase order by ID. "
         "Returns supplier, total amount, currency, and approval status. "
-        "Only PO-1001 exists in this demo."
+        "May also include a linked invoice identifier."
     ),
     "input_schema":{
         "type":"object",

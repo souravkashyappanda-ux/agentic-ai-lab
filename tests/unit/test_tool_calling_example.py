@@ -5,9 +5,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from anthropic.types import Message
 
-import tool_demo
-
-
+import examples.tool_calling as tool_demo
 def make_response(content, stop_reason):
     """Build an SDK response locally; no API request is made."""
     return Message(
@@ -25,7 +23,7 @@ def make_response(content, stop_reason):
 def client(monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "fake-test-key")
     monkeypatch.setattr(tool_demo, "load_dotenv", lambda: None)
-    with patch("tool_demo.Anthropic") as constructor:
+    with patch("examples.tool_calling.Anthropic") as constructor:
         mock_client = MagicMock()
         constructor.return_value.__enter__.return_value = mock_client
         yield mock_client
@@ -101,7 +99,7 @@ def test_invalid_tool_request_does_not_execute(client, name, arguments):
     client.messages.create.return_value = MagicMock(
         stop_reason="tool_use", content=[block],
     )
-    with patch("tool_demo.get_purchase_order") as execute:
+    with patch("examples.tool_calling.get_purchase_order") as execute:
         with pytest.raises(ValueError):
             tool_demo.main()
         execute.assert_not_called()
@@ -114,7 +112,7 @@ def test_truncated_response_does_not_execute(client):
           "name": "get_purchase_order", "input": {"po_id": "PO-1001"}}],
         "max_tokens",
     )
-    with patch("tool_demo.get_purchase_order") as execute:
+    with patch("examples.tool_calling.get_purchase_order") as execute:
         with pytest.raises(RuntimeError, match="Unexpected stop reason"):
             tool_demo.main()
         execute.assert_not_called()

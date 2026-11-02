@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "po-intelligence-agent"
+version = "0.1.0"
+description = "Purchase Order Intelligence Agent built incrementally with Claude tools"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "anthropic>=2.3.0,<3",
+    "pydantic>=2.14.1,<3",
+    "psycopg[binary]>=3.3.6,<4",
+    "python-dotenv>=1.2.4,<2",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=9.1.1,<10"]
+
+[project.scripts]
+po-agent = "po_agent.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["po_agent*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests/unit"]
+addopts = ["--import-mode=importlib"]

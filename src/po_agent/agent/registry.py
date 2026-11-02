@@ -1,7 +1,7 @@
 from pydantic import BaseModel, ConfigDict, ValidationError
 
-from payment_status import PAYMENT_STATUS_TOOL, get_payment_status
-from purchase_order import PURCHASE_ORDER_TOOL, get_purchase_order
+from po_agent.tools.payment_status import PAYMENT_STATUS_TOOL, get_payment_status
+from po_agent.tools.purchase_order import PURCHASE_ORDER_TOOL, get_purchase_order
 
 
 class PurchaseOrderInput(BaseModel):
@@ -26,8 +26,19 @@ TOOL_INPUT_MODELS = {
 }
 
 
-def execute_tool(name: str, arguments: object) -> dict[str, object]:
-    if name not in TOOL_FUNCTIONS:
+def execute_tool(
+    name: str,
+    arguments: object,
+    *,
+    tool_functions: dict | None = None,
+) -> dict[str, object]:
+    functions = (
+        TOOL_FUNCTIONS
+        if tool_functions is None
+        else tool_functions
+    )
+
+    if name not in functions or name not in TOOL_INPUT_MODELS:
         return {
             "ok": False,
             "error": "Unknown tool.",
@@ -43,7 +54,7 @@ def execute_tool(name: str, arguments: object) -> dict[str, object]:
             "error": "Invalid tool arguments.",
         }
 
-    function = TOOL_FUNCTIONS[name]
+    function = functions[name]
 
     try:
         result = function(**validated.model_dump())

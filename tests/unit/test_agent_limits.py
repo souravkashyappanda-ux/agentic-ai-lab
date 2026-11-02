@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from anthropic.types import Message
 
-from agent_loop import run_agent
+from po_agent.agent.loop import run_agent
 
 
 def make_response(content, stop_reason="tool_use", **usage):
@@ -33,7 +33,7 @@ def test_iteration_limit_does_not_execute_unusable_tool():
     client = MagicMock()
     client.messages.create.return_value = make_response([tool_call("call_1")])
 
-    with patch("agent_loop.execute_tool") as execute:
+    with patch("po_agent.agent.loop.execute_tool") as execute:
         with pytest.raises(RuntimeError, match="Maximum agent iterations"):
             run_agent(client, "Get PO-1001.", max_iterations=1)
         execute.assert_not_called()
@@ -48,7 +48,7 @@ def test_token_budget_accumulates_across_requests():
         make_response([tool_call("call_2")]),
     ]
 
-    with patch("agent_loop.execute_tool") as execute:
+    with patch("po_agent.agent.loop.execute_tool") as execute:
         execute.return_value = {"ok": True, "data": {"po_id": "PO-1001"}}
         with pytest.raises(RuntimeError, match="Agent token budget reached"):
             run_agent(client, "Get PO-1001.", max_total_tokens=30)
@@ -69,7 +69,7 @@ def test_cache_tokens_are_included_in_budget(capsys):
         cache_read_input_tokens=8,
     )
 
-    with patch("agent_loop.execute_tool") as execute:
+    with patch("po_agent.agent.loop.execute_tool") as execute:
         with pytest.raises(RuntimeError, match="Agent token budget reached"):
             run_agent(client, "Get PO-1001.", max_total_tokens=30)
         execute.assert_not_called()
@@ -182,7 +182,7 @@ def test_truncated_response_does_not_execute_tools():
         [tool_call("call_partial")], stop_reason="max_tokens",
     )
 
-    with patch("agent_loop.execute_tool") as execute:
+    with patch("po_agent.agent.loop.execute_tool") as execute:
         with pytest.raises(RuntimeError, match="Unexpected stop reason: max_tokens"):
             run_agent(client, "Get PO-1001.")
         execute.assert_not_called()

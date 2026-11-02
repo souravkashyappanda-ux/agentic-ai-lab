@@ -1,7 +1,7 @@
 import pytest
 
-from payment_status import get_payment_status
-from tool_registry import execute_tool
+from po_agent.tools.payment_status import get_payment_status
+from po_agent.agent.registry import execute_tool
 
 
 def test_payment_status():

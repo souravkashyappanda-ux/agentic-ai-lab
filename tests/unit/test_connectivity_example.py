@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock, patch
 
-from main import main
+from examples.claude_connectivity import main
 
 
 def test_main_success(capsys):
@@ -14,9 +14,9 @@ def test_main_success(capsys):
     response.usage.output_tokens = 40
 
     with (
-        patch("main.load_dotenv"),
-        patch("main.os.getenv", return_value="fake-test-key"),
-        patch("main.Anthropic") as mock_anthropic,
+        patch("examples.claude_connectivity.load_dotenv"),
+        patch("examples.claude_connectivity.os.getenv", return_value="fake-test-key"),
+        patch("examples.claude_connectivity.Anthropic") as mock_anthropic,
     ):
         client = mock_anthropic.return_value.__enter__.return_value
         client.messages.create.return_value = response

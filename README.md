@@ -1,188 +1,285 @@
 # Purchase Order Intelligence Agent
 
-A learning project for building a multi-tool AI agent incrementally with Python
-and the official Anthropic SDK. The eventual agent will compare purchase orders,
-invoices, and payment status.
+A Python learning project that builds a custom Claude tool-calling agent one
+phase at a time. The eventual agent compares purchase orders, PDF invoices, and
+payment status. Python 3.11+ is required; the current environment is Windows with
+Python 3.14.2.
 
-**Current checkpoint: Phase 3 — custom multi-tool loop, tested offline and live.**
-The loop uses two registered fictional tools, an iteration limit, a soft run-token
-budget, and per-request usage/latency/cost reporting. The learner's live trial
-completed in two LLM calls: 1,780 tokens, estimated USD 0.00025920, 4.34 seconds
-overall. This validates one fixture case, not an optimization benchmark.
-The Phase 1 example remains in `main.py`. Phase 2 adds a fictional purchase-order
-tool and a two-request demonstration in `tool_demo.py`. Database/PDF/REST
-integration belongs to Phase 4 and requires learner approval.
+**Current work: Phase 4 — PostgreSQL live-verified; PDF and REST next.** The runner
+retrieves purchase orders from PostgreSQL; payment status is still fictional.
+The learner's Phase 4A trial completed in two LLM calls: 1,827 tokens, estimated
+USD 0.00027630, and 2.75 seconds overall. This validates one integration case,
+not a controlled optimization benchmark.
 
-## Project files
+Next implementation plan: [Phase 4B — PDF invoice extraction](docs/phase-4b-plan.md).
+This continues on the existing Phase 4 branch; PDF implementation has not started.
+
+## Project layout
 
 ```text
 agentic-ai-lab/
-├── .env.example       # Safe configuration template
-├── .gitignore         # Excludes secrets, virtual environment, and caches
-├── AGENTS.md          # Instructions for future Codex work
-├── BENCHMARKS.csv     # Header for future measured comparisons
-├── LEARNING.md        # Phase notes, actual usage, and lessons
-├── README.md          # Setup and execution guide
-├── agent_loop.py      # Iterative tool calling with request/output/token limits
-├── agent_runner.py    # Live entry point using one client and a 3,000-token soft budget
-├── main.py            # One live Claude request and usage reporting
-├── payment_status.py  # Fictional payment-status function and schema
-├── purchase_order.py  # Fictional purchase-order function and tool schema
-├── requirements.txt   # Installed dependency snapshot
-├── test_agent_limits.py # Loop limits, errors, and multiple-tool tests
-├── test_agent_loop.py # Basic mocked agent round trip
-├── test_agent_runner.py # Offline runner startup and missing-key tests
-├── test_main.py       # Phase 1 offline success-path test
-├── test_payment_status.py # Payment fixture and registry tests
-├── test_tool_demo.py  # Phase 2 mocked round-trip and validation tests
-├── test_tool_registry.py # Input validation and registry tests
-├── tool_registry.py   # Schemas, functions, validators, and execution boundary
-└── tool_demo.py       # Request tool, execute locally, send result, get answer
+├── src/
+│   └── po_agent/                 # Installable application package
+│       ├── __init__.py
+│       ├── __main__.py           # python -m po_agent entry point
+│       ├── cli.py                # Credentials, client setup, live run
+│       ├── agent/
+│       │   ├── loop.py           # LLM iterations, history, limits, accounting
+│       │   └── registry.py       # Schemas, argument validation, dispatch
+│       ├── db/
+│       │   └── purchase_orders.py # Parameterized PostgreSQL lookup
+│       └── tools/
+│           ├── purchase_order.py # Tool schema and fictional fallback
+│           └── payment_status.py # Fictional payment tool
+├── tests/
+│   └── unit/                    # Offline tests, including mocked DB/LLM calls
+├── scripts/
+│   ├── check_database.py        # Check DB login and identity
+│   └── check_database_tool.py   # Check registry → DB → JSON, without Claude
+├── examples/
+│   ├── claude_connectivity.py   # Preserved Phase 1 paid example
+│   └── tool_calling.py          # Preserved Phase 2 paid example
+├── database/
+│   ├── init.sql                 # Table and fictional seed record
+│   └── readonly.sql             # Create reader role and permissions
+├── docs/
+│   └── phase-4b-plan.md          # Next implementation and validation checklist
+├── compose.yaml                 # Local PostgreSQL service and persistent volume
+├── pyproject.toml               # Package, direct dependencies, CLI, pytest config
+├── requirements.txt             # Pinned dependency snapshot
+├── .env.example                 # Secret-free configuration template
+├── .gitignore
+├── AGENTS.md                    # Instructions for future Codex work
+├── LEARNING.md                  # Phase history, usage evidence, lessons
+└── BENCHMARKS.csv               # Header for future controlled experiments
 ```
 
-Local `.env` and `.venv/` are excluded from Git.
+Package directories also contain `__init__.py`. Only `po_agent` is included in the
+application distribution; `scripts`, `examples`, tests, and database provisioning
+files are repository utilities. Run their module commands from the project root.
 
-## Setup on Windows / PowerShell
+The `src` layout separates importable application code from repository files.
+An editable install makes `po_agent` importable without `sys.path` workarounds.
+There is no single mandatory Python folder layout; this uses the
+[PyPA src layout](https://packaging.python.org/en/latest/discussions/src-layout-vs-flat-layout/)
+and pytest's [integration guidance](https://pytest.org/en/stable/explanation/goodpractices.html).
 
-Requires Python 3.11+; this checkpoint was tested with Python 3.14.2 on Windows.
-Run from the project directory. Reuse `.venv` if it already exists; otherwise
-create it with the first command:
+## Setup
+
+Run from the project root. Reuse `.venv` if it already exists:
 
 ```powershell
 python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+python -m pip install -e ".[dev]"
 ```
 
-Explicit interpreter paths work without activation. Optionally activate with
-`.\.venv\Scripts\Activate.ps1`, after which `python` uses the virtual environment.
-The requirements file snapshots this environment, including transitive packages;
-a fresh installation has not yet been verified.
+`pyproject.toml` declares direct dependencies and the test extra. The requirements
+file is the pinned environment snapshot, not a cross-platform lockfile. Fresh
+environment installation has not yet been verified. An editable installation
+uses source changes immediately; reinstall after changing package metadata or
+entry points. Creating the editable package may download build dependencies.
 
-If `.env` does not already exist, copy the template:
+Without activation, replace `python` with `.\.venv\Scripts\python.exe` in commands.
+In VS Code, select this interpreter using **Python: Select Interpreter**.
+
+If `.env` does not exist, copy the template:
 
 ```powershell
 Copy-Item .env.example .env
 ```
 
-Edit `.env` locally and set `ANTHROPIC_API_KEY`. Leave `.env.example` without a real
-key. Existing environment variables take precedence over `.env` by default.
-The mocked test needs no API key.
+Set the real values only in local `.env`. Keep all passwords and the API key empty
+in `.env.example`. Configuration groups are:
 
-## Run and inspect
+| Settings | Purpose |
+| --- | --- |
+| `ANTHROPIC_API_KEY` | Authenticates live Claude requests |
+| `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD` | Initial Docker database setup |
+| `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | Python's read-only database connection |
 
-Run the offline test first:
+For the demonstrated setup, Python uses `127.0.0.1:5433`, database `po_agent`, and
+user `agent_reader`. Existing environment variables take precedence over `.env`.
+The database password is initialized on the volume's first startup; changing the
+environment file does not change an existing database password.
+
+## Offline tests
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest -q
+python -m pytest -q -p no:cacheprovider
 ```
 
-Expected: `33 passed`. The tests mock the SDK and environment loading; they make
-no API calls. Their token numbers are fixtures.
+Expected: **42 passed**. Tests are collected from `tests/unit` using pytest's
+`importlib` mode. They require neither Docker nor API credentials and make no
+live LLM or database calls. Usage and timing values in them are fixtures.
 
-For one paid live request, run from the project root:
+Run one file or one function:
 
 ```powershell
-.\.venv\Scripts\python.exe main.py
+python -m pytest tests/unit/test_agent_loop.py -v -p no:cacheprovider
+python -m pytest tests/unit/test_database_tool.py::test_po_id_is_bound_as_data -v -p no:cacheprovider
 ```
 
-The script uses `claude-haiku-5-5`, a 128-token output cap, disabled thinking,
-disabled automatic retries, and a 30-second timeout. It prints the full SDK
-response, answer, model, stop reason, usage, request latency, and estimated cost.
-Model access requires a valid Anthropic API account and available credit.
+## PostgreSQL setup and checks
 
-The prompt is `Explain a purchase order in one short sentence.` The learner's
-first reported call used 21 input and 40 output tokens, took 1.36 seconds, and had
-an estimated cost of USD 0.00002210. Actual usage can vary. `end_turn` means the
-answer finished normally; `max_tokens` means output reached its cap.
+Start Docker Desktop, then:
 
-## Cost assumptions and limits
+```powershell
+docker compose up --wait db
+docker compose ps
+```
 
-For the current Phase 3 runner, execute `python agent_runner.py` after running
-the offline tests. It uses one client, at most four LLM requests, and a
-3,000-token soft threshold. The loop prints usage, request latency, and uncached
-request/run cost estimates; the runner prints the final answer and total runtime.
-Each execution incurs API usage. The threshold is checked after receiving usage,
-so it can be exceeded by a request. Cached usage disables the basic run-cost
-estimate rather than presenting an incomplete total.
+For a new database, apply the table/seed script and then create the reader role:
 
-For the Phase 2 demonstration, run `python tool_demo.py` from the activated
-environment after testing. A normal run makes two paid API requests: the first
-requests the tool; Python validates the arguments and reads fictional data;
-the second includes the original question, assistant tool request, and matching
-`tool_result`. The second request uses `tool_choice={"type": "none"}`. Per-request
-usage/cost and combined run cost are printed. This is a fixed round trip, not a
-general agent loop. Invalid inputs currently raise exceptions rather than being
-returned as tool errors. Run it only when ready to incur API usage.
+```powershell
+Get-Content -Raw database/init.sql | docker compose exec -T db psql -U agent_admin -d po_agent -v ON_ERROR_STOP=1
+Get-Content -Raw database/readonly.sql | docker compose exec -T db psql -U agent_admin -d po_agent -v ON_ERROR_STOP=1
+```
 
-The example hardcodes short-prompt standard rates of USD 0.10 per million input
-tokens and USD 0.50 per million output tokens, checked on 2026-10-26 against
-[Anthropic's model documentation](https://platform.claude.com/docs/en/models/haiku-5-5/overview).
-Verify rates before changing models or using the example later.
+`init.sql` avoids duplicate seed insertion. **Run `readonly.sql` only once**: it
+creates a role and is not an idempotent migration system. Existing users do not
+need to reprovision the database for this source reorganization.
+
+Set the reader password interactively:
+
+```powershell
+docker compose exec db psql -U agent_admin -d po_agent
+```
+
+At the PostgreSQL prompt:
 
 ```text
-estimated USD = (input_tokens × input_rate + output_tokens × output_rate) / 1,000,000
+\password agent_reader
+\q
 ```
 
-This covers the basic uncached request, excluding future cache pricing, other
-tiers, taxes, and currency conversion. Cumulative reported spend is recorded
-manually in `LEARNING.md`; the application does not persist spending or traces
-yet. No measured token-optimization improvement is claimed.
+Save that password as `DB_PASSWORD` locally. The reader receives SELECT permission
+on `public.purchase_orders`; application code must not use the setup account.
+
+Run the checks without Claude:
+
+```powershell
+python -m scripts.check_database
+python -m scripts.check_database_tool
+```
+
+The registry check should print `ok: true`, amount `"15000.00"`, and invoice
+`"INV-2001"` for the seeded PO. Check an unknown ID with:
+
+```powershell
+python -m scripts.check_database_tool PO-9999
+```
+
+Its expected generic tool error exits with status 1. Connection failures also
+return generic tool errors; the identity check helps diagnose connection issues.
+
+## Run the agent
+
+Inspect the entry point without making a paid call:
+
+```powershell
+python -m po_agent --help
+```
+
+After the database check succeeds, run one paid trial:
+
+```powershell
+python -m po_agent
+```
+
+The equivalent installed console command is `po-agent`. Run from the project
+root when using its `.env`; an installed application can also use process
+environment variables. The runner uses one client, disables automatic retries,
+and allows at most four LLM calls with a 3,000-token **soft** run threshold.
+Each response's output is capped at 256 tokens or the remaining observed allowance.
+
+Usage is known after a request finishes, so the threshold can be exceeded by one
+request. The current policy stops at or above it even if that response contains
+an answer. The loop prints stop reason, usage, LLM latency, and estimated uncached
+request/run cost. The runner prints the final answer and total run time.
+
+The last reported Phase 3 fictional-data trial used two LLM calls, 1,780 tokens,
+estimated USD 0.00025920, and 4.34 seconds overall. It is not a controlled benchmark.
+The separate Phase 4A database-backed trial is recorded above and in `LEARNING.md`.
+
+## Earlier learning examples
+
+Both examples make paid Claude requests when executed:
+
+```powershell
+python -m examples.claude_connectivity
+python -m examples.tool_calling
+```
+
+Phase 1 makes one request. Phase 2 demonstrates a fixed tool round trip, separately
+from the reusable agent loop. Historical entries in `LEARNING.md` retain old
+filenames/commands; the links and current commands use this organized layout.
+
+## Cost accounting
+
+The current estimator uses Haiku 5.5 short-prompt standard rates: USD 0.10 per
+million input tokens and USD 0.50 per million output tokens, checked 2026-10-29
+against [Anthropic's model documentation](https://platform.claude.com/docs/en/models/haiku-5-5/overview).
+Verify pricing before changing models or using this example later.
+
+```text
+estimated USD = (input_tokens × 0.10 + output_tokens × 0.50) / 1,000,000
+```
+
+Cached usage makes the basic run-cost estimate unavailable; cache pricing and
+longer-prompt tiers are not implemented. Estimates exclude taxes and currency
+conversion. Cumulative reported spend is recorded manually in `LEARNING.md`;
+there is no persisted spend ledger or full tracing yet. No measured optimization
+improvement is claimed. `BENCHMARKS.csv` remains header-only.
 
 ## Debug in VS Code
 
-1. Install the Microsoft Python extension if needed.
-2. Open the project folder. Use **Python: Select Interpreter** in the command
-   palette and choose `.venv\Scripts\python.exe`.
-3. Run **Python: Configure Tests**, choose **pytest**, then the project root.
-4. Set a breakpoint on `input_tokens = response.usage.input_tokens` in `main.py`.
-5. In Testing, right-click `test_main_success` and choose **Debug Test**.
-6. Inspect `response` and its usage. Press **F10** to step through the token and
-   cost calculation. Press **F5** to continue. This test makes no API request.
+The checked-in [.vscode/launch.json](.vscode/launch.json) provides three Windows
+configurations, explicitly using the project's `.venv` interpreter:
 
-To debug a live call, open `main.py` and choose **Python Debugger: Debug Python
-File** from the command palette. Each execution can make a paid request. Avoid
-inspecting or sharing credentials.
+| Configuration | What it executes |
+| --- | --- |
+| Database registry check (no Claude) | Real PostgreSQL lookup through the registry |
+| Registry override test (offline) | Fake function dispatch; no Docker or Claude needed |
+| Full agent (paid Claude API) | Actual agent loop, database lookup, and Claude calls |
 
-## Troubleshooting
+1. Open this project folder in VS Code with the Python Debugger extension.
+2. For the database check, start Docker Desktop and run `docker compose up --wait db`.
+3. The database configuration has `stopOnEntry: true`: it pauses automatically
+   at startup, so a manual breakpoint is optional. You can also place one on
+   `result = execute_tool(...)` in `scripts/check_database_tool.py`.
+4. Open Run and Debug with **Ctrl+Shift+D**, select **Database registry check
+   (no Claude)**, and press **F5**.
+5. Press **F11** to enter `execute_tool`. Inspect `name`, `arguments`, and
+   `tool_functions`. Use **F10** to step over validation, then inspect `function`
+   before stepping into the database lookup.
+6. **Shift+F11** steps out, **F5** continues, and **Shift+F5** stops debugging.
+
+Choose the offline configuration to learn dictionary dispatch without a running
+database. The full-agent configuration spends API credits; use it after the
+database check succeeds. Set additional breakpoints in `src/po_agent/cli.py` and
+`src/po_agent/agent/loop.py` to inspect messages and tool results. Do not share
+credentials from debugger variables. Configuration format and shortcuts follow
+[VS Code's Python debugging documentation](https://code.visualstudio.com/docs/python/debugging).
+
+## Troubleshooting and Git checkpoints
 
 | Symptom | Check |
 | --- | --- |
-| `ModuleNotFoundError` | Select `.venv` and install requirements with that interpreter. |
-| Missing-key message | Set the key in local `.env` or the process environment. |
-| Authentication error | Verify the key locally; do not share it in logs or chat. |
-| API request error | Inspect the status code for model access, credit, rate-limit, or network issues. |
-| Truncated response | Review the prompt and output cap before increasing it. |
-| Pytest cache-write warning | Run `python -m pytest -q -p no:cacheprovider` to test without the optional cache. |
+| `No module named po_agent` | Activate `.venv` and run `python -m pip install -e ".[dev]"`. |
+| `No module named psycopg` | Use the project interpreter and install requirements. |
+| Root `agent_runner.py` or `database_tool.py` is missing | Use module commands above; these files moved into packages. |
+| Database timeout | Start Docker Desktop, check `docker compose ps`, then run the DB identity check. |
+| Missing setting | Configure local `.env` or process environment variables. |
+| API request failure | Inspect status/stop reason; check credit, model access, and network connectivity. |
 
-API failures currently propagate as exceptions; structured error handling is
-future work. `.gitignore` controls ordinary tracking, not file-reading access or
-removal of secrets already committed.
+At each phase checkpoint, run offline tests, update `LEARNING.md`, inspect
+`git diff` and staged changes, commit, and push the phase branch. Merge completed
+phases into `main` before branching for the next phase. This layout refactor is
+still part of Phase 4; it does not advance the roadmap.
 
-## First GitHub checkpoint
-
-Create an empty GitHub repository without an initial README, license, or gitignore.
-Initialize Git locally and review the staged files:
-
-```powershell
-git init
-git branch -M main
-git check-ignore .env .venv/
-git add .gitignore .env.example AGENTS.md BENCHMARKS.csv LEARNING.md README.md main.py requirements.txt test_main.py
-git diff --cached --check
-git diff --cached
-git status --short
-```
-
-Confirm `.env` and `.venv/` are ignored and no real credentials appear in the diff.
-Then commit and connect the empty repository, replacing YOUR_USERNAME:
-
-```powershell
-git commit -m "Complete phase 1 Claude connectivity and mocked test"
-git remote add origin https://github.com/YOUR_USERNAME/agentic-ai-lab.git
-git push -u origin main
-```
-
-If Git requests identity, set `git config user.name "Your Name"` and
-`git config user.email "YOUR_EMAIL"`. A GitHub noreply email can be used.
-For later checkpoints, push working code, relevant tests, and updated learning
-notes together; add reproducible benchmark results when experiments begin.
+`.env`, `.venv`, caches, and packaging artifacts are ignored. `.gitignore` affects
+tracking, not read access or removal of secrets from earlier commits. To refresh
+the dependency snapshot after an editable install without adding a machine-local
+project path, use `python -m pip freeze --exclude po-intelligence-agent > requirements.txt`.

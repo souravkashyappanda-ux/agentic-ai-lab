@@ -10,8 +10,8 @@ Phase 2 requires explicit approval.
 
 | File | Purpose |
 | --- | --- |
-| [main.py](main.py) | Load configuration, send one Claude request, print response and usage. |
-| [test_main.py](test_main.py) | Test request construction, answer printing, and cost arithmetic offline. |
+| [main.py](examples/claude_connectivity.py) | Load configuration, send one Claude request, print response and usage. |
+| [test_main.py](tests/unit/test_connectivity_example.py) | Test request construction, answer printing, and cost arithmetic offline. |
 | [.env.example](.env.example) | Safe configuration template without a real key. |
 | [requirements.txt](requirements.txt) | Snapshot of installed dependency versions. |
 | [README.md](README.md) | Setup, running, testing, debugging, and GitHub instructions. |
@@ -136,7 +136,7 @@ push the Phase 1 checkpoint. Tool calling has not started.
   taught incrementally for the learner to execute. Phase 3 is not approved.
 - **First component:** A small `get_purchase_order(po_id)` function backed by
   fictional in-memory data. The saved function is now present in
-  [purchase_order.py](purchase_order.py); the learner reported completing the
+  [purchase_order.py](src/po_agent/tools/purchase_order.py); the learner reported completing the
   direct-call step, without pasting its successful output. No
   database, registry, or general agent loop is introduced at this step.
 - **Planned request/response flow:** Send the user's question and tool schema to
@@ -144,7 +144,7 @@ push the Phase 1 checkpoint. Tool calling has not started.
   a `tool_result` linked to the tool-use ID; receive the final text answer.
   Claude requests execution; application code actually runs the function.
 - **Usage and spend:** The learner reported one Phase 2 live call from
-  [tool_demo.py](tool_demo.py): 473 input tokens, 57 output tokens, zero cache
+  [tool_demo.py](examples/tool_calling.py): 473 input tokens, 57 output tokens, zero cache
   creation/read and thinking tokens, 1.36-second request latency, and estimated
   cost USD 0.00007580 using the Phase 1 short-prompt pricing assumptions.
   Cumulative estimated spend across the two reported live calls is
@@ -207,7 +207,7 @@ push the Phase 1 checkpoint. Tool calling has not started.
   failed round trip, not just successful application runs. Unreported activity
   remains unknown; this is not an account billing total.
 - **Offline regression verification:** Added
-  [test_tool_demo.py](test_tool_demo.py). It checks the two-request history,
+  [test_tool_demo.py](tests/unit/test_tool_calling_example.py). It checks the two-request history,
   matching tool-use ID, actual fictional tool result, combined cost arithmetic,
   direct-answer early exit, invalid name/arguments, and truncated-response
   rejection. SDK responses and mocked transport require no network or credentials.
@@ -303,7 +303,7 @@ or additional estimated spend are recorded.
 ### Phase 3 execution boundary progress
 
 The learner saved `PurchaseOrderInput` and `execute_tool` in
-[tool_registry.py](tool_registry.py), plus [test_tool_registry.py](test_tool_registry.py).
+[tool_registry.py](src/po_agent/agent/registry.py), plus [test_tool_registry.py](tests/unit/test_tool_registry.py).
 Codex inspected the saved source: unknown names are rejected, strict Pydantic
 validation rejects malformed arguments, and execution failures return a generic
 error rather than exposing exception details. The broad execution exception
@@ -324,8 +324,8 @@ or measured optimization is recorded here.
 
 ### Phase 3 loop progress and budget instruction
 
-The learner saved [agent_loop.py](agent_loop.py) and
-[test_agent_loop.py](test_agent_loop.py). Codex ran
+The learner saved [agent_loop.py](src/po_agent/agent/loop.py) and
+[test_agent_loop.py](tests/unit/test_agent_loop.py). Codex ran
 `python -m pytest -q -p no:cacheprovider`: **17 passed in 3.51s**. The added
 mocked test covers a tool request followed by a final answer and the linked
 result's contents. Multi-round, multi-call, and limit/error coverage is not yet
@@ -351,7 +351,7 @@ spend cap. Under the current policy, even an `end_turn` answer is rejected if it
 reported usage reaches or exceeds the threshold. No token-counting preflight is
 implemented yet.
 
-Added [test_agent_limits.py](test_agent_limits.py) with nine offline cases covering:
+Added [test_agent_limits.py](tests/unit/test_agent_limits.py) with nine offline cases covering:
 iteration exhaustion without wasted tool execution, cumulative usage, cache-token
 accounting, multiple tool requests with both success/error results, repeated tool
 rounds with one original question, truncated output, malformed tool-use responses,
@@ -383,15 +383,15 @@ estimated spend remains USD 0.00033100. No benchmark or optimization is claimed.
 ### Phase 3: two registered tools verified — 2026-10-29
 
 The payment-tool instruction had not yet been applied when work resumed. Codex
-added [payment_status.py](payment_status.py), registered its schema/function/input
-model in [tool_registry.py](tool_registry.py), and added
-[test_payment_status.py](test_payment_status.py). The fixture returns PO-1001 as
+added [payment_status.py](src/po_agent/tools/payment_status.py), registered its schema/function/input
+model in [tool_registry.py](src/po_agent/agent/registry.py), and added
+[test_payment_status.py](tests/unit/test_payment_status.py). The fixture returns PO-1001 as
 unpaid, with amount paid 0 INR. Unknown PO IDs raise locally and are converted
 to generic execution errors by the registry. Both tools use the same strict
 `po_id` input model. No external payment service is contacted.
 
 The loop did not change. A new test in
-[test_agent_limits.py](test_agent_limits.py) supplies a mocked response requesting
+[test_agent_limits.py](tests/unit/test_agent_limits.py) supplies a mocked response requesting
 both registered functions, verifies both are actually executed locally, and
 checks that their successful results carry distinct matching IDs in the next
 request. The final answer is mocked, so this validates orchestration, not live
@@ -412,8 +412,8 @@ remains in progress; Phase 4 is not approved.
 
 ### Phase 3 runner and usage reporting — 2026-10-29
 
-The learner created [agent_runner.py](agent_runner.py) and
-[test_agent_runner.py](test_agent_runner.py): the runner loads local configuration,
+The learner created [agent_runner.py](src/po_agent/cli.py) and
+[test_agent_runner.py](tests/unit/test_agent_runner.py): the runner loads local configuration,
 opens one SDK client with retries disabled and a 30-second timeout, and calls
 `run_agent` with four iterations and a 3,000-token soft budget. It asks for
 PO-1001's supplier, total amount, and payment status, then prints the answer and
@@ -421,7 +421,7 @@ whole-run latency. The startup tests mock the loop and configuration, including
 the missing-key path. Live execution has not been reported.
 
 At the learner's explicit request, Codex added per-request `perf_counter` timing
-and cost reporting in [agent_loop.py](agent_loop.py). Cost is printed after usage
+and cost reporting in [agent_loop.py](src/po_agent/agent/loop.py). Cost is printed after usage
 is reported and before the budget guard, so a request that reaches the threshold
 is still accounted for. Each uncached request estimates USD cost using the
 short-prompt Haiku 5.5 rates checked on 2026-10-29 against the linked Anthropic
@@ -495,6 +495,289 @@ The learner experiment for Phase 3 is complete: inspect the two stop reasons,
 per-request usage, final fixture values, and whole-run time. A further exercise
 can debug the existing mocked repeated-tool test, observing history growth
 without spending credits. Commit/push this phase before beginning integrations.
+
+## Phase 4: Real integrations — PostgreSQL wiring, 2026-10-30
+
+**Approval and status:** The learner approved Phase 4 and is working on
+`phase-4-real-integrations`. Phase 4A is in progress; PDF and REST integration
+are not implemented yet. Phase 5 is not approved.
+
+### Built and request/response flow
+
+The learner added [compose.yaml](compose.yaml), [database/init.sql](database/init.sql),
+[database/readonly.sql](database/readonly.sql), [check_database.py](scripts/check_database.py),
+[database_tool.py](src/po_agent/db/purchase_orders.py), and [test_database_tool.py](tests/unit/test_database_tool.py).
+The database lookup uses Psycopg, explicit selected columns, parameter binding,
+connection/query timeouts, and a read-only account configured through `DB_*`
+environment variables. Numeric amounts are normalized to decimal strings for
+JSON serialization. The learner reported completing direct connection and lookup
+steps but did not paste their terminal results; Codex has not independently
+verified the running database or permissions.
+
+At the learner's explicit request, Codex implemented optional function mappings
+in [tool_registry.py](src/po_agent/agent/registry.py) and [agent_loop.py](src/po_agent/agent/loop.py).
+[agent_runner.py](src/po_agent/cli.py) copies the default mapping and replaces only
+`get_purchase_order` with `get_purchase_order_from_db`. The mapping passes from
+runner to loop to executor. The executor still requires a registered input model
+and validates arguments before calling the selected function. The default mapping
+remains unchanged for offline callers. Payment status is still fictional.
+
+The purchase-order schema description now describes the operation without
+claiming it always uses fictional data. The future live flow is the existing
+Claude tool-use exchange, followed by a PostgreSQL SELECT and JSON tool result.
+The runner's question, model, four-iteration cap, 3,000-token soft threshold, and
+256-token per-response ceiling remain unchanged. No live stop reason or usage
+has been observed for this database-backed route yet.
+
+### Validation, failures, and limits
+
+Updated [test_agent_runner.py](tests/unit/test_agent_runner.py) to verify database selection;
+[test_agent_loop.py](tests/unit/test_agent_loop.py) now exercises both default and injected
+lookup functions, including the invoice ID returned through tool-result history.
+[test_tool_registry.py](tests/unit/test_tool_registry.py) checks mapping overrides, preservation
+of the default mapping, and an explicitly empty mapping. Existing database tests
+mock Psycopg to check decimal normalization, missing rows, and bound parameters.
+
+`python -m pytest -q -p no:cacheprovider`: **39 passed in 4.55s**.
+`git diff --check` passed. No test failure occurred in this wiring step. No
+database connection, `.env` read, or Claude request was made by Codex.
+
+Earlier, Phase 4 was created from Phase 2 before Phase 3 had reached `main`, so
+the agent files were missing. The learner checkpointed PostgreSQL work and
+merged the committed Phase 3 branch into Phase 4; source inspection confirmed
+the restored files. The readonly SQL script also previously contained a duplicated
+block; the learner was instructed to remove it. Reprovisioning/idempotent role
+creation and live permission verification have not been independently tested.
+
+### Usage and optimization evidence
+
+Phase 4 live LLM calls, token usage, latency, and cost are **not measured**.
+Database execution alone consumes no Claude tokens. Previously reported cumulative
+estimated API spend remains **USD 0.00059020**, excluding unreported activity.
+The new invoice ID and decimal-string representation change returned context;
+their token impact has not been measured. Bounded SELECT results are a design
+choice, not a demonstrated optimization. No benchmark row is added.
+
+### Learner experiment and remaining work
+
+First verify the database function through an overridden registry without Claude;
+inspect `ok`, the decimal amount, and `invoice_id`. Verify unknown PO IDs return a
+structured error. Then run one paid agent trial when ready and record its actual
+usage and answer. PDF and mock REST integrations remain later steps within Phase 4.
+
+### Phase 4A database registry check — resumed 2026-11-02
+
+Added [check_database_tool.py](scripts/check_database_tool.py): it selects the PostgreSQL
+implementation through the registry, accepts an optional PO ID (default PO-1001),
+prints a JSON result, and exits with status 0 for success or 1 for a tool error.
+It does not construct an LLM client or make an LLM request.
+
+[test_check_database_tool.py](tests/unit/test_check_database_tool.py) exercises the full
+registry-to-database-function path with mocked Psycopg: parameter binding,
+decimal-string normalization, missing records, and sanitized connection failures.
+The previous offline validation was **42 passed in 3.42s**, with
+`git diff --check` also passing. That result is historical; tests were not rerun
+merely to resume the conversation.
+
+The local live registry check returned `ok: false`; `check_database.py` diagnosed
+a connection timeout. A requested outside-sandbox retry was aborted, so the
+cause was not established and live database verification remains incomplete.
+No database success, permission check, or live agent result is inferred from
+the mocked tests. No paid LLM request occurred and cumulative estimated reported
+spend remains USD 0.00059020. No optimization benchmark has run.
+
+Next learner experiment: start Docker Desktop, run `docker compose up --wait db`,
+then `python check_database_tool.py`. Inspect the success flag, amount, and invoice
+ID. Resolve any connection failure before a paid agent trial. Phase 4A remains
+in progress; PDF/REST work and Phase 4 completion remain pending.
+
+### Phase 4 organization refactor — 2026-11-02
+
+**Status:** Source organization complete, still within Phase 4A. Database-backed
+live validation and the later PDF/REST steps remain pending. The learner asked
+to replace the confusing root-level file collection with a conventional Python
+project layout. No new phase or agent feature was introduced.
+
+### What moved and why
+
+| Previous location | Current location |
+| --- | --- |
+| `agent_runner.py` | [src/po_agent/cli.py](src/po_agent/cli.py) |
+| `agent_loop.py` | [src/po_agent/agent/loop.py](src/po_agent/agent/loop.py) |
+| `tool_registry.py` | [src/po_agent/agent/registry.py](src/po_agent/agent/registry.py) |
+| `database_tool.py` | [src/po_agent/db/purchase_orders.py](src/po_agent/db/purchase_orders.py) |
+| Purchase-order/payment schemas and fixtures | [src/po_agent/tools](src/po_agent/tools) |
+| Database check scripts | [scripts](scripts) |
+| Phase 1 and Phase 2 examples | [examples](examples) |
+| Root-level tests | [tests/unit](tests/unit) |
+
+Nineteen Python files were moved, preserving their source changes. Package
+imports and mock patch targets were updated together. Earlier learning entries
+retain historical filenames and commands; their local source links now point
+to the new files. Root-level compatibility copies were not retained, to avoid
+creating another set of confusing entry points.
+
+[pyproject.toml](pyproject.toml) declares the setuptools build backend, package
+metadata, direct dependencies, development extra, console entry point, and pytest
+configuration. Application packages are discovered under `src`; tests use
+`importlib` mode and are collected from `tests/unit`. `requirements.txt` remains
+the pinned dependency snapshot. Scripts and examples are repository-only module
+commands, separate from the installed application distribution.
+
+The project was installed in editable mode into the existing `.venv` using
+`python -m pip install --no-deps -e .`. Source edits are immediately importable;
+metadata/entry-point changes require reinstalling. Build artifacts are ignored.
+The first installation attempt hit sandbox network restrictions while fetching
+setuptools; the approved retry downloaded the build dependency and succeeded.
+No runtime dependencies were upgraded by this command.
+
+`python -m po_agent` and the `po-agent` console command run the application.
+Their `--help` exits before invoking the live runner. Database checks now use
+`python -m scripts.check_database_tool`; the earlier phase examples use
+`python -m examples.claude_connectivity` and `python -m examples.tool_calling`.
+README and AGENTS instructions were updated to this layout. The exact duplicate
+block in `database/readonly.sql` was removed from the source file; no SQL was
+executed, and the script still intentionally creates its role only once.
+
+### Validation and remaining limitations
+
+- Before moving files: **42 passed in 4.79s**.
+- After moving files and installing the package:
+  `python -m pytest -q -p no:cacheprovider` — **42 passed in 6.31s**.
+- `python -m pip check`: **No broken requirements found**.
+- Both `python -m po_agent --help` and the installed console command work.
+- Database-check help works without contacting PostgreSQL.
+- From outside the repository, installed package imports and a fictional lookup
+  work. This checks that application imports do not depend on root-level files.
+- Local documentation links and Python syntax were checked; no root-level Python
+  modules remain, and `BENCHMARKS.csv` is still header-only.
+- `git diff --check` passed. Git reported local LF/CRLF normalization notices;
+  these were not application or test failures.
+
+The test durations above are single observations, not a performance comparison.
+No live LLM/database calls, API tokens, or new reported API spending occurred.
+Cumulative estimated reported live spend remains USD 0.00059020. The LLM request,
+response handling, schemas, usage accounting, soft budgets, and dispatch behavior
+remain as before this refactor. No optimization improvement is claimed.
+
+The layout follows the
+[PyPA src-layout guidance](https://packaging.python.org/en/latest/discussions/src-layout-vs-flat-layout/)
+and [pytest integration guidance](https://pytest.org/en/stable/explanation/goodpractices.html).
+It organizes the code for continued development; it does not establish production
+readiness. Fresh-environment installation and the database-backed live route
+remain unverified; the previous database connection timeout is unresolved.
+
+Learner experiment: run the offline suite, then inspect `cli.py` → `agent/loop.py`
+→ `agent/registry.py` → `db/purchase_orders.py`. Once Docker is running, use
+`python -m scripts.check_database_tool` to resume the pending database checkpoint.
+
+### Phase 4 debugging setup — 2026-11-02
+
+Added [.vscode/launch.json](.vscode/launch.json) with three named configurations:
+real database registry check without Claude, offline registry override test, and
+full paid agent. They use the project's Windows `.venv` interpreter, repository
+working directory, and module entry points. README documents breakpoint placement,
+step into/over/out, and which configuration requires external services.
+
+Validated the configuration JSON and interpreter path. The selected offline
+command passed: `tests/unit/test_tool_registry.py::test_custom_function_mapping`
+— **1 passed in 0.20s**. `git diff --check` passed with existing LF/CRLF notices.
+The VS Code interactive debugger itself has not been started or observed by Codex.
+No database or LLM requests were made in this setup step. Reported cumulative
+estimated live spend remains USD 0.00059020; live Phase 4 usage is not measured.
+
+Learner experiment: choose the database registry configuration, pause before
+`execute_tool`, and inspect the function dictionary as it passes into validation
+and dispatch. Use the offline configuration if PostgreSQL is unavailable. A real
+database timeout is still unresolved; successful GUI debugging and the live
+database-backed agent trial remain pending. No optimization claim is made.
+
+### Automatic debugger pause
+
+The learner could not place a breakpoint. Enabled `stopOnEntry: true` for the
+database registry debug configuration so VS Code pauses automatically at startup.
+No application source was changed. Configuration JSON was validated; the IDE
+session itself still needs to be launched by the learner. No database or LLM
+request was made for this change, and reported spend is unchanged.
+
+### Phase 4A database-backed live validation — 2026-11-02
+
+**Status:** Phase 4A PostgreSQL lookup and agent wiring are live-verified. Phase 4
+as a whole remains in progress: PDF extraction and the mock REST payment service
+are pending. Phase 5 is not approved.
+
+The standalone registry check returned the seeded PO-1001 row: Demo Office
+Supplies, amount `"15000.00"`, INR, approved, invoice INV-2001. Codex observed
+the successful check, and the learner pasted its expected result. This resolves
+the earlier connectivity checkpoint; permission enforcement was not independently
+rechecked in this step.
+
+An agent attempt in Codex's sandbox failed before receiving a Claude response
+with WinError 10013 / APIConnectionError. The requested outside-sandbox run was
+not approved. No usage or cost was reported for the failed attempt; it is not
+assigned invented usage. The learner then ran `python -m po_agent` in their own
+activated terminal and provided the successful output below.
+
+| Iteration | Stop reason | Input tokens | Output tokens | LLM latency | Estimated USD |
+| --- | --- | --- | --- | --- | --- |
+| 1 | tool_use | 629 | 135 | 1.59 seconds | 0.00013040 |
+| 2 | end_turn | 964 | 99 | 0.94 seconds | 0.00014590 |
+| Total | Completed | 1593 | 234 | 2.53 seconds summed LLM time | 0.00027630 |
+
+Both responses reported zero cache creation/read and thinking tokens. The run
+used **1,827 / 3,000 tokens**, completed in **2.75 seconds** overall, and stayed
+within the four-iteration cap. The roughly 0.22-second difference from summed
+request times includes database/local processing, client lifecycle, and printing;
+it is not a separately measured database latency.
+
+The final answer matches both sources: PostgreSQL supplies Demo Office Supplies,
+INR 15,000.00, approved status, and invoice INV-2001; the payment function still
+supplies fictional unpaid status and INR 0 paid. The invoice reference does not
+represent PDF extraction. Individual live tool-use blocks are not logged, so
+their exact ordering cannot be reconstructed from this excerpt.
+
+Cost check: `(1593 * 0.10 + 234 * 0.50) / 1,000,000 = USD 0.00027630`, using
+the existing short-prompt rates. Cumulative estimated cost of all reported
+responses is **USD 0.00086650** (prior USD 0.00059020 plus this run), across nine
+responses. This includes prior responses in runs that failed afterward;
+unreported usage, taxes, and conversion remain outside the total.
+
+The earlier 42 passing offline tests and this learner-run trial validate the
+current integration case. No code changes or additional paid trials were needed
+to record these results. Differences from Phase 3 are not a controlled comparison;
+no optimization claim or benchmark row is added.
+
+The learner experiment is complete: inspect the registry JSON and the two agent
+iterations. Next: commit the Phase 4A integration/package organization, then add
+bounded PDF extraction for INV-2001. A deliberately different invoice total will
+support a later discrepancy check. Full Phase 4 completion still requires PDF
+and REST integration plus their tests.
+
+### Phase 4A push preparation and Phase 4B plan
+
+The learner explicitly requested committing/pushing the completed checkpoint and
+preparing the next part. The prepared checkpoint includes PostgreSQL routing,
+the src package layout, updated imports/tests/docs, VS Code debug configurations,
+the deduplicated reader-role SQL source, and the recorded live validation.
+
+Pre-push validation: **42 passed in 3.86s** using
+`python -m pytest -q -p no:cacheprovider`; `git diff --check` passed with existing
+line-ending notices. A limited credential-pattern check reviewed 38 existing
+publishable files, verified blank example-secret fields, and confirmed `.env`
+and `.venv` are ignored. The local `.env` was not opened for that review.
+
+Added [docs/phase-4b-plan.md](docs/phase-4b-plan.md), specifying a reproducible
+text-based INV-2001 fixture, bounded PyMuPDF extraction, an invoice tool schema,
+offline failure-path tests, and one eventual live comparison. The planned invoice
+amount is INR 15,500.00 against the seeded PO amount of INR 15,000.00, giving an
+expected INR 500.00 discrepancy. No PDF, parser, dependency installation, or new
+live experiment was implemented merely to prepare the plan.
+
+Phase 4B continues on `phase-4-real-integrations`, because it is part of the same
+approved Phase 4. Phase 4C REST integration remains afterward; Phase 5 is not
+approved. No new LLM usage or paid trial occurred in push preparation; cumulative
+estimated reported spend remains USD 0.00086650. No benchmark row or optimization
+claim is added.
 
 ## Future phase entry template
 

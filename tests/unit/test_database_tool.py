@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 import pytest
 
-from database_tool import get_purchase_order_from_db
+from po_agent.db.purchase_orders import get_purchase_order_from_db
 
 
 @pytest.fixture
@@ -20,8 +20,8 @@ def database_cursor(monkeypatch):
         monkeypatch.setenv(name, value)
 
     with (
-        patch("database_tool.load_dotenv"),
-        patch("database_tool.psycopg.connect") as connect,
+        patch("po_agent.db.purchase_orders.load_dotenv"),
+        patch("po_agent.db.purchase_orders.psycopg.connect") as connect,
     ):
         connection = connect.return_value.__enter__.return_value
         cursor = connection.cursor.return_value.__enter__.return_value

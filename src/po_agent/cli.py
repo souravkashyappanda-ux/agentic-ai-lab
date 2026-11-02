@@ -4,7 +4,9 @@ from time import perf_counter
 from anthropic import Anthropic
 from dotenv import load_dotenv
 
-from agent_loop import run_agent
+from po_agent.agent.loop import run_agent
+from po_agent.db.purchase_orders import get_purchase_order_from_db
+from po_agent.agent.registry import TOOL_FUNCTIONS
 
 
 def main() -> None:
@@ -20,6 +22,11 @@ def main() -> None:
         "and whether it has been paid. Use the available tools."
     )
 
+    live_functions = {
+        **TOOL_FUNCTIONS,
+        "get_purchase_order": get_purchase_order_from_db,
+    }
+
     start = perf_counter()
 
     with Anthropic(
@@ -32,6 +39,7 @@ def main() -> None:
             question=question,
             max_iterations=4,
             max_total_tokens=3000,
+            tool_functions=live_functions,
         )
 
     elapsed = perf_counter() - start
