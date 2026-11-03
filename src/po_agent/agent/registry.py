@@ -1,5 +1,6 @@
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from po_agent.tools.invoice import INVOICE_ID_PATTERN, INVOICE_TOOL, read_invoice
 from po_agent.tools.payment_status import PAYMENT_STATUS_TOOL, get_payment_status
 from po_agent.tools.purchase_order import PURCHASE_ORDER_TOOL, get_purchase_order
 
@@ -10,19 +11,28 @@ class PurchaseOrderInput(BaseModel):
     po_id: str
 
 
+class InvoiceInput(BaseModel):
+    model_config = ConfigDict(strict=True, extra="forbid")
+
+    invoice_id: str = Field(pattern=INVOICE_ID_PATTERN)
+
+
 TOOL_SCHEMAS = [
     PURCHASE_ORDER_TOOL,
     PAYMENT_STATUS_TOOL,
+    INVOICE_TOOL,
 ]
 
 TOOL_FUNCTIONS = {
     "get_purchase_order": get_purchase_order,
     "get_payment_status": get_payment_status,
+    "read_invoice": read_invoice,
 }
 
 TOOL_INPUT_MODELS = {
     "get_purchase_order": PurchaseOrderInput,
     "get_payment_status": PurchaseOrderInput,
+    "read_invoice": InvoiceInput,
 }
 
 

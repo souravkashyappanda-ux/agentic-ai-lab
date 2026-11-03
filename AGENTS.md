@@ -17,6 +17,10 @@ for PostgreSQL access. Keep offline tests in `tests/unit`, local checks in
 `scripts`, earlier learning demos in `examples`, and provisioning SQL in
 `database`. Do not reintroduce root-level Python application modules.
 
+HTTP clients belong in `src/po_agent/integrations`; local mock servers belong in
+`src/po_agent/services`. Keep shared response contracts in `src/po_agent/models.py`
+and clearly distinguish fictional service data from the real HTTP transport.
+
 Use an editable install (`python -m pip install -e ".[dev]"`) and package imports,
 not `sys.path` modifications. Run tests with
 `python -m pytest -q -p no:cacheprovider`. Use `python -m po_agent` for a paid live

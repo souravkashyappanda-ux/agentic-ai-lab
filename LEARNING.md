@@ -779,6 +779,276 @@ approved. No new LLM usage or paid trial occurred in push preparation; cumulativ
 estimated reported spend remains USD 0.00086650. No benchmark row or optimization
 claim is added.
 
+### Phase 4B-C combined integrations — implemented; live Claude trial pending
+
+The learner requested PDF extraction and mock HTTP payments together, overriding
+the earlier sequential plan. Work remains within Phase 4; Phase 5 is not approved.
+
+Built bounded, labelled invoice extraction in
+[invoice.py](src/po_agent/tools/invoice.py), a fictional
+[invoice generator](scripts/create_demo_invoice.py), and the generated
+[INV-2001 PDF](data/invoices/INV-2001.pdf). The PDF contains INR 15,500.00 versus
+the seeded PostgreSQL PO total of INR 15,000.00. Extraction returns structured
+fields and source file/page references, not raw PDF text. Limits are 5 MiB,
+5 pages, and 6,000 extracted characters; scanned PDFs need OCR and are unsupported.
+This is a controlled labelled format, not a general invoice parser.
+
+Added a [FastAPI mock payment service](src/po_agent/services/mock_payments.py),
+[HTTP client](src/po_agent/integrations/payments.py), and shared
+[payment contract](src/po_agent/models.py). Payment data is fictional; the
+transport is real HTTP. The client validates IDs/responses, uses a five-second
+timeout, rejects redirects, and bounds response size to 4 KiB. The service
+returns unpaid status and INR 0.00 for PO-1001. Installed PyMuPDF 1.28.2,
+FastAPI 0.162.0, Uvicorn 0.54.0, and HTTPX 0.28.1; requirements were updated.
+An initial dependency download failed with sandbox WinError 10013; the approved
+escalated installation succeeded. Local secrets were not printed.
+
+[Registry](src/po_agent/agent/registry.py) now exposes three schemas:
+`get_purchase_order`, `get_payment_status`, and `read_invoice`.
+[CLI](src/po_agent/cli.py) selects the database and HTTP implementations and asks
+Claude to retrieve PO-1001, read its linked invoice, obtain payment status,
+compare totals, identify discrepancies, and cite the PDF source.
+There is no explicit system message. Model remains `claude-haiku-5-5`, thinking
+disabled, at most four calls and 256 output tokens per response. The runner's
+soft token threshold increased from 3,000 to 6,000 to allow the additional schema
+and dependent invoice lookup. This is an engineering allowance, not a measured
+optimization or a hard pre-request spending cap.
+
+The mocked combined-flow test uses three Claude responses: a PO/payment tool
+request (`tool_use`), then an invoice request (`tool_use`), then a final answer
+(`end_turn`). Python validates and runs each request, appends the assistant
+blocks and matching user `tool_result` blocks, and resends the growing history.
+It verifies message counts of 1, 3, and 5. These are mocked responses and usage,
+not evidence of a live Claude answer's correctness.
+
+Validation: an actual local preflight connected to PostgreSQL, extracted the
+generated PDF, and called a temporary loopback Uvicorn service over HTTP.
+[check_integrations.py](scripts/check_integrations.py) calculated the exact
+invoice-minus-PO difference of INR 500.00 and matching suppliers. That temporary
+server was stopped afterward. Offline coverage includes PDF limits and invalid
+content, HTTP failures/contracts, registry routing, linked tool errors, and
+cross-source ID/currency checks. The combined implementation initially passed
+89 tests in 4.76 seconds; dependency checking reported no broken requirements.
+
+No paid Claude call was made for these changes. Live combined input/output/cache
+tokens, stop reasons, LLM latency, and cost are **not measured**. Development
+LLM call count to the application API: **0**. Cumulative estimated reported API
+spend remains **USD 0.00086650**, separate from Codex session usage. No controlled
+comparison ran, so `BENCHMARKS.csv` remains header-only and no savings are claimed.
+
+Learner experiment: keep the mock server running with
+`python -m uvicorn po_agent.services.mock_payments:app --host 127.0.0.1 --port 8001`.
+In another activated terminal run `python -m scripts.check_integrations`; inspect
+the three source envelopes and `invoice_minus_po` value `500.00`. With PostgreSQL
+and the service available, `python -m po_agent` is the pending paid trial. Check
+the final answer against those sources and record actual usage afterward.
+Full Phase 4 completion remains pending that trial. See the
+[combined plan](docs/phase-4b-plan.md) for setup and remaining limits.
+
+### Phase 4 terminal output for learning (2026-11-03)
+
+The learner requested clearer agent output. Updated
+[loop.py](src/po_agent/agent/loop.py) and [cli.py](src/po_agent/cli.py) to display
+the question, source-to-tool map, request message/schema counts, output limit,
+returned model and stop reason explanation, and per-call token/cache usage,
+latency, and estimated cost. Each executed tool shows its name, matching request
+ID, arguments, success/error envelope, and the result sent back to Claude.
+The completed-run summary reports call/tool/failure counts and cumulative token,
+LLM latency, and cost totals before the final answer. Overall run latency remains
+separate. Unknown cache fields are labelled as not reported. The display is for
+this fictional demo and does not print credentials or raw invoice text.
+
+The request payload, growing message history, tool execution, return value, and
+stop conditions are unchanged; local printing adds no model context tokens.
+No token/cost reduction was measured or claimed. Validation after this change:
+`python -m pytest -q -p no:cacheprovider` — **89 passed in 6.99 seconds**.
+No new failure was observed. No live Claude request ran; its current output,
+tokens, latency, and cost remain not measured. Cumulative reported application
+API spend stays USD 0.00086650; Codex usage is separate. No benchmark row added.
+The experiment is the same pending single live trial above: follow the displayed
+tool IDs across request/result pairs, compare message counts between calls, and
+verify the final INR 500.00 discrepancy against the source results.
+
+### Phase 4 combined live attempt and recovery (2026-11-03)
+
+The learner supplied a live `python -m po_agent` run of the combined prompt
+described above. No explicit system message was used; the model was
+`claude-haiku-5-5`, thinking disabled, three tool schemas, and a 256-token output
+limit. The run allowed four calls and a 6,000-token soft threshold.
+
+| Call | Stop reason | Input | Output | Cache created/read | LLM seconds | Estimated USD |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | tool_use | 836 | 144 | 0 / 0 | 5.01 | 0.00015560 |
+| 2 | tool_use | 1145 | 97 | 0 / 0 | 4.46 | 0.00016300 |
+| 3 | max_tokens | 1347 | 256 | 0 / 0 | 2.35 | 0.00026270 |
+| Total | Failed; no complete answer | 3328 | 497 | 0 / 0 | 11.82 | 0.00058130 |
+
+Message counts were 1, 3, then 5. Call 1 requested PO-1001 from the database
+(success: INR 15,000.00, linked INV-2001) and payment status (generic tool error).
+Call 2 requested INV-2001 (success: INR 15,500.00, source INV-2001.pdf page 1).
+Python appended each assistant request and matching user tool results, including
+the payment error. Call 3 exhausted its output allowance; its content was not
+present in the learner's transcript. No final answer or successful payment
+verification can be claimed. Total usage was 3,825 tokens. Overall run latency
+was not reported; 11.82 seconds is the sum of the displayed LLM latencies only.
+
+Using the existing configured USD 0.10/M input and USD 0.50/M output assumptions
+(last recorded pricing check 2026-10-29), the failed run still cost an estimated
+USD 0.00058130. Cumulative estimated reported application API spend is now
+**USD 0.00144780** across twelve responses, including failed application runs.
+This excludes Codex usage, unreported requests, currency conversion, and taxes.
+
+A separate no-LLM payment check reproduced a connection-refused error at the
+configured endpoint. This establishes current service unavailability, though the
+earlier generic tool error alone does not prove its exact cause. The mock HTTP
+server must remain running in another terminal.
+
+Updated [loop.py](src/po_agent/agent/loop.py) with configurable
+`max_output_tokens` (default 256) and [cli.py](src/po_agent/cli.py) to use 768.
+The total soft threshold remains 6,000. A larger response allowance may consume
+more tokens; successful completion at this setting remains untested live.
+Truncated text is labelled incomplete, truncated tool calls are never executed,
+and no automatic retry is made. The CLI reports loop failures without a traceback
+and exits with status 1. Payment failures display service startup/check commands;
+internal exception details remain outside model-facing results.
+
+Validation: **93 passed in 4.98 seconds** with the required offline pytest command;
+`git diff --check` passed with line-ending notices. Added checks for configurable
+allowances, remaining-budget limits, incomplete-text handling, no automatic retry,
+and the CLI failure exit. No additional live Claude call was made for these fixes.
+No optimization comparison or benchmark row was added. Phase 4 remains pending
+a successful combined trial. Learner experiment: start the mock service, run
+`python -m scripts.check_integrations` to confirm all three sources without Claude,
+then run `python -m po_agent` once and inspect the source results, final discrepancy,
+stop reason, and usage. The expected discrepancy remains INR 500.00.
+
+### Phase 4 latest learner run and request logging (2026-11-03)
+
+The learner's next live transcript completed with `end_turn`, but payment status
+remained unavailable. The same combined question, three tool schemas, no explicit
+system message, `claude-haiku-5-5`, disabled thinking, and 768 output tokens/call
+were used. History sizes were 1, 3, and 5 messages.
+
+| Call | Stop reason | Input | Output | Cache created/read | LLM seconds | Estimated USD |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | tool_use | 836 | 141 | 0 / 0 | 1.39 | 0.00015410 |
+| 2 | tool_use | 1142 | 156 | 0 / 0 | 1.11 | 0.00019220 |
+| 3 | end_turn | 1479 | 440 | 0 / 0 | 2.70 | 0.00036790 |
+| Total | Partial task success | 3457 | 737 | 0 / 0 | 5.21 reported summary | 0.00071420 |
+
+The displayed individual latencies sum to 5.20 seconds; the reported 5.21-second
+summary accumulates underlying unrounded measurements. Overall latency was
+10.38 seconds. Four tools executed: PO succeeded, payment failed, then invoice
+succeeded and payment failed again. The second payment attempt was requested by
+Claude, not an automatic transport retry. The final answer correctly reported an
+INR 500.00 higher invoice, cited INV-2001.pdf page 1, and marked payment status
+unavailable. Suggested reasons for the discrepancy were hypotheses, not retrieved
+facts. This is not complete validation of the payment integration.
+
+The run consumed 4,194 tokens and estimated USD 0.00071420 under the existing
+recorded pricing assumptions. Cumulative estimated reported application spend is
+now **USD 0.00216200 across fifteen responses**. Codex usage is separate. The final
+response used 440 tokens, showing why the earlier 256-token allowance was too
+small for this answer; different runs are not a controlled optimization comparison.
+No benchmark row or savings claim is added.
+
+The learner then requested visibility into what is sent to Claude. Added
+`python -m po_agent --log-requests` through
+[entry point](src/po_agent/__main__.py), [CLI](src/po_agent/cli.py), and
+[loop](src/po_agent/agent/loop.py). Immediately before each request it prints the
+same SDK argument dictionary used by `client.messages.create`: model, output
+limit, thinking configuration, schemas, and complete messages/results. SDK content
+blocks serialize to JSON with unset fields omitted. This is an application-level
+payload view, not a raw HTTP capture. Client credentials and authentication
+headers are outside that dictionary and are not logged. Full prompt and tool
+content is visible; the experiment uses fictional demo data. No persistent trace
+file is created automatically. Detailed logging is off by default.
+
+Logging does not change model context, tool flow, or output limits, and adds no
+API tokens. No live Claude call was made to implement it; live latency overhead
+is not measured. Validation: **93 passed in 4.97 seconds**, including parsing the
+logged first and second request JSON and verifying schemas, messages, and linked
+tool results; CLI help exposes the new option. No new failure was observed.
+Learner experiment: keep PostgreSQL and the mock payment server running, confirm
+the sources with `python -m scripts.check_integrations`, then run once with
+`--log-requests`. Inspect the first user question, then the later assistant
+`tool_use` and user `tool_result` blocks with matching IDs. Phase 4 remains pending
+successful payment retrieval in the combined live trial; Phase 5 is not approved.
+
+### Phase 4 closure — learner confirmation (2026-11-03)
+
+After request logging was added, the learner confirmed that the next execution
+worked perfectly and that they understood the request/tool flow. Phase 4 is
+complete based on that learner-reported successful run, alongside the prior
+integration checks and 93 passing offline tests. The latest successful transcript
+was not supplied: exact tool ordering, stop reasons, input/output/cache tokens,
+call count, latency, and estimated cost for that run are **not reported**. Earlier
+partial/failed trials remain recorded above and are not relabelled successful.
+
+No new implementation or paid call was performed to record this confirmation.
+Cumulative estimated spend from reported measurements remains USD 0.00216200;
+the newly confirmed run adds an unknown amount, so this is an incomplete spend
+total. No benchmark comparison or savings claim is added. Full request logging
+remains an optional terminal display, not persistent structured tracing.
+
+The original roadmap's next milestone is **Phase 5: token accounting and agent
+tracing**. Proposed scope: run IDs, structured JSON events, LLM/tool timings and
+sizes, usage/cost aggregation including failures, and sanitized trace inspection.
+These records should support later Phase 6 experiments; they do not themselves
+establish optimization improvements. This entry closes Phase 4; Phase 5
+implementation awaits approval after the concept explanation.
+
+### Phase 4 successful transcript and push checkpoint (2026-11-03)
+
+The learner supplied the request-logging transcript for the previously confirmed
+successful run and explicitly requested pushing this phase. This fills the
+missing measurements in the closure entry; it is not an additional run beyond
+that learner confirmation. The combined question, no explicit system message,
+three schemas, `claude-haiku-5-5`, disabled thinking, and 768-token output limit
+were unchanged. The payload log shows the original question followed by linked
+assistant tool requests and user tool results; history sizes were 1, 3, and 5.
+
+| Call | Stop reason | Input | Output | Cache created/read | LLM seconds | Estimated USD |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | tool_use | 836 | 141 | 0 / 0 | 1.43 | 0.00015410 |
+| 2 | tool_use | 1179 | 80 | 0 / 0 | 1.74 | 0.00015790 |
+| 3 | end_turn | 1364 | 424 | 0 / 0 | 2.64 | 0.00034840 |
+| Total | Completed | 3379 | 645 | 0 / 0 | 5.82 reported summary | 0.00066040 |
+
+Rounded individual LLM latencies sum to 5.81 seconds; the run summary accumulated
+unrounded measurements and reported 5.82 seconds. Overall latency was 6.53 seconds.
+Three tools executed with **zero failures**. First, PostgreSQL returned PO-1001,
+INR 15,000.00, linked INV-2001; the HTTP mock returned unpaid status and INR 0.00
+paid. Next, PDF extraction returned INR 15,500.00 with INV-2001.pdf page 1.
+The final answer correctly stated the INR 500.00 discrepancy, matching supplier,
+PO reference and currency, and unpaid status. Suggested discrepancy causes and
+payment recommendations are generated commentary, not additional retrieved facts.
+
+Reported usage: **4,024 tokens**, estimated **USD 0.00066040** using the existing
+recorded USD 0.10/M input and USD 0.50/M output pricing assumptions. Cumulative
+estimated reported application API spend is **USD 0.00282240 across eighteen
+responses**, including earlier failed application runs. Codex usage is separate.
+No new paid Claude call was made during push preparation.
+
+Phase 4 is validated by this live transcript and the local checks. Pre-push
+offline validation: **93 passed in 4.88 seconds**; `pip check` found no broken
+requirements and `git diff --check` passed with line-ending notices. Documentation
+was updated to show completion and the current output allowance. No controlled
+before/after optimization experiment ran, so BENCHMARKS.csv remains header-only
+and no savings claim is made. Prior payment failures and truncation fixes remain
+documented above. Learner experiment is complete: the logged requests show how
+the invoice lookup depends on the PO result and how payment results reach Claude.
+
+Staged verification initially treated the small generated PDF as text and flagged
+PDF cross-reference record whitespace. Added [.gitattributes](.gitattributes) with
+`*.pdf binary` so Git preserves PDF bytes and does not apply text line-ending
+conversions. This is repository handling only; the PDF content was unchanged.
+
+Checkpoint target: `phase-4-real-integrations` on origin, containing combined
+PDF/HTTP integrations, bounded contracts, tests, readable output, request logging,
+and updated learning records. Phase 5 has not started. The learner requested a
+discussion of Phase 3 after this push; no other phase is implemented here.
+
 ## Future phase entry template
 
 For each phase, record:

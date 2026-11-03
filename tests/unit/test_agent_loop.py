@@ -56,7 +56,7 @@ def test_agent_tool_round_trip(capsys, use_override):
     )
 
     with patch("po_agent.agent.loop.perf_counter", side_effect=[10.0, 11.25, 12.0, 12.75]):
-        answer = run_agent(client, "Who supplies PO-1001?", **run_options)
+        answer = run_agent(client, "Who supplies PO-1001?", log_requests=True, **run_options)
 
     if use_override:
         database_lookup.assert_called_once_with(po_id="PO-1001")
@@ -86,3 +86,20 @@ def test_agent_tool_round_trip(capsys, use_override):
     assert "Estimated run cost so far: $0.00001050" in output
     assert "LLM latency: 1.25 seconds" in output
     assert "LLM latency: 0.75 seconds" in output
+    decoder = json.JSONDecoder()
+    payloads = [
+        decoder.raw_decode(part.lstrip())[0]
+        for part in output.split(": SDK arguments as JSON ---")[1:]
+    ]
+    assert len(payloads) == 2
+    assert payloads[0]["messages"] == [
+        {"role": "user", "content": "Who supplies PO-1001?"},
+    ]
+    assert payloads[0]["tools"] == second_request["tools"]
+    assert payloads[0]["model"] == second_request["model"]
+    assert payloads[0]["max_tokens"] == second_request["max_tokens"]
+    assert payloads[0]["thinking"] == {"type": "disabled"}
+    assert len(payloads[1]["messages"]) == 3
+    assert payloads[1]["messages"][1]["content"][0]["id"] == "toolu_test"
+    assert payloads[1]["messages"][2]["content"][0] == tool_result
+    assert "api_key" not in payloads[0]

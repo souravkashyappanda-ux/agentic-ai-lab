@@ -5,14 +5,16 @@ phase at a time. The eventual agent compares purchase orders, PDF invoices, and
 payment status. Python 3.11+ is required; the current environment is Windows with
 Python 3.14.2.
 
-**Current work: Phase 4 — PostgreSQL live-verified; PDF and REST next.** The runner
-retrieves purchase orders from PostgreSQL; payment status is still fictional.
-The learner's Phase 4A trial completed in two LLM calls: 1,827 tokens, estimated
-USD 0.00027630, and 2.75 seconds overall. This validates one integration case,
-not a controlled optimization benchmark.
+**Completed: Phase 4 — combined PostgreSQL, PDF, and mock payment HTTP.** The
+runner retrieves purchase orders from PostgreSQL, invoice fields from a local
+PDF, and payment status over HTTP. Payment data is still fictional, served by a
+local FastAPI application. The three-source check and combined paid agent trial
+both succeeded. The final trial used 4,024 tokens across three Claude calls,
+estimated USD 0.00066040, and 6.53 seconds overall with no tool failures.
 
-Next implementation plan: [Phase 4B — PDF invoice extraction](docs/phase-4b-plan.md).
-This continues on the existing Phase 4 branch; PDF implementation has not started.
+Combined milestone details: [Phase 4B–4C — PDF and payment HTTP](docs/phase-4b-plan.md).
+This continues on the existing Phase 4 branch. The earlier Phase 4A live trial
+used 1,827 tokens, estimated USD 0.00027630, and 2.75 seconds; it is a separate case.
 
 ## Project layout
 
@@ -23,19 +25,29 @@ agentic-ai-lab/
 │       ├── __init__.py
 │       ├── __main__.py           # python -m po_agent entry point
 │       ├── cli.py                # Credentials, client setup, live run
+│       ├── models.py             # Validated payment response contract
 │       ├── agent/
 │       │   ├── loop.py           # LLM iterations, history, limits, accounting
 │       │   └── registry.py       # Schemas, argument validation, dispatch
 │       ├── db/
 │       │   └── purchase_orders.py # Parameterized PostgreSQL lookup
+│       ├── integrations/
+│       │   └── payments.py       # Bounded, timeout-controlled HTTP client
+│       ├── services/
+│       │   └── mock_payments.py  # FastAPI service with fictional payment data
 │       └── tools/
+│           ├── invoice.py        # Bounded extraction of labelled invoice PDFs
 │           ├── purchase_order.py # Tool schema and fictional fallback
 │           └── payment_status.py # Fictional payment tool
 ├── tests/
 │   └── unit/                    # Offline tests, including mocked DB/LLM calls
 ├── scripts/
 │   ├── check_database.py        # Check DB login and identity
-│   └── check_database_tool.py   # Check registry → DB → JSON, without Claude
+│   ├── check_database_tool.py   # Check registry → DB → JSON, without Claude
+│   ├── create_demo_invoice.py   # Generate the fictional PDF fixture
+│   └── check_integrations.py    # Verify PostgreSQL + PDF + payment HTTP
+├── data/invoices/
+│   └── INV-2001.pdf             # Fictional invoice fixture, INR 15,500.00
 ├── examples/
 │   ├── claude_connectivity.py   # Preserved Phase 1 paid example
 │   └── tool_calling.py          # Preserved Phase 2 paid example
@@ -98,6 +110,8 @@ in `.env.example`. Configuration groups are:
 | `ANTHROPIC_API_KEY` | Authenticates live Claude requests |
 | `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD` | Initial Docker database setup |
 | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | Python's read-only database connection |
+| `INVOICE_DIR` | PDF directory; defaults to `data/invoices` |
+| `PAYMENT_API_BASE_URL` | Payment service; defaults to `http://127.0.0.1:8001` |
 
 For the demonstrated setup, Python uses `127.0.0.1:5433`, database `po_agent`, and
 user `agent_reader`. Existing environment variables take precedence over `.env`.
@@ -110,7 +124,7 @@ environment file does not change an existing database password.
 python -m pytest -q -p no:cacheprovider
 ```
 
-Expected: **42 passed**. Tests are collected from `tests/unit` using pytest's
+Expected: **89 passed**. Tests are collected from `tests/unit` using pytest's
 `importlib` mode. They require neither Docker nor API credentials and make no
 live LLM or database calls. Usage and timing values in them are fixtures.
 
@@ -176,6 +190,54 @@ return generic tool errors; the identity check helps diagnose connection issues.
 
 ## Run the agent
 
+To see the complete application payload passed to Claude before each call, run:
+
+```powershell
+python -m po_agent --log-requests
+```
+
+This prints the actual SDK arguments as formatted JSON: model, output limit,
+thinking configuration, all tool schemas, and the entire message history,
+including prior assistant tool requests and user tool results. SDK content blocks
+are represented as JSON with unset fields omitted. It is an application payload
+view, not an HTTP wire capture; authentication headers and client credentials
+are excluded. No explicit system message is sent by this agent. The mode prints
+full prompt/tool content, so use it with this fictional demo data. The default
+command keeps this detailed request logging off. Logging adds no API tokens.
+
+The terminal shows the question and data sources first. Each Claude call shows
+the history size, output limit, stop reason, tokens, latency, and estimated USD
+cost. Tool sections show the arguments, request ID, and returned fields; the same
+ID links each result to Claude's request. The run summary separates Claude calls
+from local tool executions, then prints the final answer. These local display
+details do not add tokens to Claude's requests. Payment records and the sample
+invoice are fictional demo data.
+
+The combined flow needs PostgreSQL, the included PDF, and the mock HTTP service.
+Start Docker Desktop and run `docker compose up --wait db` as above. The fictional
+PDF is included; if missing, generate it with `python -m scripts.create_demo_invoice`.
+The generator refuses to overwrite an existing file.
+
+In one activated terminal, keep the local payment service running:
+
+```powershell
+python -m uvicorn po_agent.services.mock_payments:app --host 127.0.0.1 --port 8001
+```
+
+Its interactive API documentation is at `http://127.0.0.1:8001/docs`. It exposes
+GET payment status and health routes; it does not initiate payments.
+
+In another activated terminal, check all sources without Claude:
+
+```powershell
+python -m scripts.check_integrations
+```
+
+Expect three `ok: true` results and `invoice_minus_po: "500.00"`: PO INR 15,000.00,
+invoice INR 15,500.00, and unpaid status with INR 0.00 paid. The checker refuses
+to compare invoices linked to another PO or currency. It uses exact Decimal
+arithmetic. This check is not an LLM-quality evaluation.
+
 Inspect the entry point without making a paid call:
 
 ```powershell
@@ -191,8 +253,13 @@ python -m po_agent
 The equivalent installed console command is `po-agent`. Run from the project
 root when using its `.env`; an installed application can also use process
 environment variables. The runner uses one client, disables automatic retries,
-and allows at most four LLM calls with a 3,000-token **soft** run threshold.
-Each response's output is capped at 256 tokens or the remaining observed allowance.
+and allows at most four LLM calls with a 6,000-token **soft** run threshold.
+The live runner caps each response at 768 output tokens or the remaining observed
+allowance. The reusable loop defaults to 256; callers can set `max_output_tokens`.
+If Claude reaches that limit, any returned text is labelled incomplete, truncated
+tool calls are not executed, and the CLI stops with a readable error. There is no
+automatic paid retry. A failed payment lookup also prints the mock-service startup
+command; keep that service running in a separate terminal.
 
 Usage is known after a request finishes, so the threshold can be exceeded by one
 request. The current policy stops at or above it even if that response contains
@@ -235,13 +302,15 @@ improvement is claimed. `BENCHMARKS.csv` remains header-only.
 
 ## Debug in VS Code
 
-The checked-in [.vscode/launch.json](.vscode/launch.json) provides three Windows
+The checked-in [.vscode/launch.json](.vscode/launch.json) provides five Windows
 configurations, explicitly using the project's `.venv` interpreter:
 
 | Configuration | What it executes |
 | --- | --- |
 | Database registry check (no Claude) | Real PostgreSQL lookup through the registry |
 | Registry override test (offline) | Fake function dispatch; no Docker or Claude needed |
+| Mock payment HTTP service (no Claude) | Local FastAPI server; keep running for HTTP checks |
+| All integrations check (no Claude) | PostgreSQL, PDF extraction, payment HTTP, and comparison |
 | Full agent (paid Claude API) | Actual agent loop, database lookup, and Claude calls |
 
 1. Open this project folder in VS Code with the Python Debugger extension.
@@ -276,8 +345,9 @@ credentials from debugger variables. Configuration format and shortcuts follow
 
 At each phase checkpoint, run offline tests, update `LEARNING.md`, inspect
 `git diff` and staged changes, commit, and push the phase branch. Merge completed
-phases into `main` before branching for the next phase. This layout refactor is
-still part of Phase 4; it does not advance the roadmap.
+phases into `main` before branching for the next phase. The package layout and
+combined integrations belong to the completed Phase 4; the next phase has not
+been started.
 
 `.env`, `.venv`, caches, and packaging artifacts are ignored. `.gitignore` affects
 tracking, not read access or removal of secrets from earlier commits. To refresh

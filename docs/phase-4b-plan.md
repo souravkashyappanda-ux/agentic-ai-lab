@@ -1,85 +1,101 @@
-# Phase 4B: PDF invoice extraction
+# Phase 4B–4C: combined PDF and payment HTTP milestone
 
-Phase 4A is live-verified. Continue on `phase-4-real-integrations`: PDF extraction
-is the next part of Phase 4, followed by the mock REST payment service. This plan
-does not start Phase 5 or introduce RAG.
+The learner requested implementing PDF extraction and the mock payment service
+together. This supersedes the earlier sequential plan, remains on
+`phase-4-real-integrations`, and does not start Phase 5 or introduce RAG.
 
-## Goal and acceptance case
+## Implemented sources
 
-Read a PDF for invoice `INV-2001`, linked from purchase order `PO-1001`. Return
-structured invoice data and source attribution so the agent can compare it with
-the purchase order.
-
-| Field | Seeded purchase order | Planned invoice fixture |
+| Source | Implementation | Demo values |
 | --- | --- | --- |
-| PO ID | PO-1001 | PO-1001 |
-| Invoice ID | INV-2001 | INV-2001 |
-| Supplier | Demo Office Supplies | Demo Office Supplies |
-| Currency | INR | INR |
-| Total amount | 15000.00 | 15500.00 |
+| Purchase order | PostgreSQL, read-only connection | PO-1001, INR 15000.00, invoice INV-2001 |
+| Invoice | PyMuPDF reads `data/invoices/INV-2001.pdf` | PO-1001, INR 15500.00, page 1 |
+| Payment | HTTPX calls the local FastAPI mock service | PO-1001, unpaid, INR 0.00 paid |
 
-Expected finding: the invoice exceeds the purchase order by **INR 500.00**.
-The invoice values are planned test data, not an existing document or measurement.
-Payment status remains fictional until Phase 4C.
+The combined no-LLM check calculated **INR 500.00** above the PO amount and
+confirmed the supplier matches. This is a functional fixture result, not an
+optimization benchmark or live LLM-quality evaluation.
 
-## Small implementation steps
+## Code map
 
-1. Install PyMuPDF and record its version in package metadata and the dependency
-   snapshot. Use its `pymupdf` import; do not install the unrelated `fitz` package.
-2. Add `scripts/create_demo_invoice.py` to generate a reproducible, text-based
-   fixture at `data/invoices/INV-2001.pdf` containing the fields above.
-3. Add `src/po_agent/tools/invoice.py` with `read_invoice(invoice_id)`. Map IDs
-   to files under the configured invoice directory; do not accept arbitrary paths.
-4. Extract and validate the controlled fixture's fields without an LLM. Treat
-   unsupported layouts, scanned/image-only pages, missing fields, corrupt files,
-   and mismatched identifiers as explicit failures rather than inventing values.
-5. Add the invoice schema, strict input model, and callable to the registry.
-   Preserve default/offline operation and dependency injection for the live runner.
-6. Verify the direct extraction and mocked agent flow before a single paid trial.
-   Update LEARNING.md with actual usage, outcomes, and limitations.
+- `src/po_agent/tools/invoice.py`: validates invoice IDs, confines file access to
+  the invoice directory, extracts labelled fields, and returns exact amount
+  strings plus source filename/page numbers. It does not return raw PDF text.
+- `scripts/create_demo_invoice.py`: creates the fictional text-based PDF and
+  refuses to overwrite existing files. The 972-byte sample is included.
+- `src/po_agent/models.py`: strict payment response contract shared by the HTTP
+  client and server.
+- `src/po_agent/services/mock_payments.py`: GET `/payments/{po_id}` and `/health`.
+  Data remains fictional; there is no payment initiation endpoint.
+- `src/po_agent/integrations/payments.py`: bounded GET response, five-second HTTP
+  timeouts, response-model/PO-ID validation, no redirects, and explicit failures.
+- `scripts/check_integrations.py`: registry-based PostgreSQL/PDF/HTTP check and
+  Decimal comparison without Claude.
+- Registry: three schemas and strict argument models. The live runner selects
+  PostgreSQL and HTTP implementations; the invoice function reads the PDF.
 
-## Output contract and limits
+## Scope and bounds
 
-Return invoice ID, PO ID, supplier, currency, and an exact decimal-string amount.
-Include source filename and page number(s). Keep raw extracted text out of the
-normal tool result; bounded diagnostic inspection can be a separate local step.
-Keep extracted content inside tool results, never system instructions.
+PDF extraction supports the controlled labelled demo format, not arbitrary
+invoices. Missing/ambiguous fields, mismatched IDs, corrupt/encrypted files,
+image-only pages, or unsupported amount/currency formats fail explicitly. It has
+5 MiB file, 5-page, and 6,000-character extracted-text limits. These are bounded
+input/output controls, not a complete defense against hostile PDF resource usage.
+OCR is not implemented.
 
-Start with configurable bounds of 5 MiB per file, 5 pages, and 6,000 extracted
-characters. These are proposed safety/size limits, not measured optimizations.
-Use Decimal for amount handling; do not convert monetary values through float.
-Extraction accuracy is initially scoped to our known fixture format. OCR and
-general-purpose invoice parsing are separate work, not implicit capabilities.
+Payment responses are limited to 4,096 bytes and validated before being returned
+to the agent. HTTP timeouts are per network phase, not a total wall-clock budget.
+Low-level failures become generic registry errors; detailed per-tool tracing is
+still future work. The local service deliberately has no external payment account
+or real transaction data.
 
-## Validation
+The runner retains four LLM iterations and a 768-token per-response cap (raised
+after a live response was truncated at 256). Its soft
+token threshold is now 6,000 to allow the additional schema/results and dependent
+invoice lookup; this is an engineering allowance, not a measured improvement or
+hard spending guarantee. Each new iteration resends accumulated context.
 
-- Offline tests create PDFs in temporary directories, without Claude or Docker.
-- Cover successful extraction, exact amount formatting, source attribution,
-  unknown/invalid IDs, path traversal, oversized files/page/text limits, corrupt
-  PDFs, image-only/empty documents, and missing or mismatched required fields.
-- A mocked agent test should retrieve the PO, follow its invoice ID, call
-  `read_invoice`, and return a grounded discrepancy explanation. Assert linked
-  tool-use IDs and correct tool-result contents, not only mocked answer text.
-- Run the full suite, then a local PDF extraction check. Only afterward run one
-  live agent trial with the same seeded PO and invoice fixture.
+## Validation and next live trial
 
-## Request flow and token implications
+**93 offline tests passed**, including actual temporary PDF extraction, FastAPI
+TestClient service behavior, HTTPX mock transports, PostgreSQL mocks, and a
+three-request mocked agent flow with linked tool-use results. The mock answer
+does not establish model correctness; tests independently verify the returned
+source fields, source pages, and exact arithmetic.
 
-```text
-User question + tool schemas → Claude
-    → get_purchase_order(PO-1001) → PostgreSQL data including INV-2001
-    → read_invoice(INV-2001) → normalized PDF fields and sources
-    → Claude compares the amounts and explains the discrepancy
+A separate local check used real PostgreSQL, the generated PDF, and real loopback
+HTTP to a temporary Uvicorn service. All three tools succeeded and the difference
+was INR 500.00. The temporary server was stopped after verification. No Claude
+request was made.
+
+To repeat against a persistent local service, start Docker and run:
+
+```powershell
+docker compose up --wait db
+python -m uvicorn po_agent.services.mock_payments:app --host 127.0.0.1 --port 8001
 ```
 
-Dependent lookups may need separate LLM iterations; do not assume a fixed call
-count. The extra schema, history, and tool result add context tokens. Keep the
-current budgets until actual measurements justify a change. Normalized output
-is a design choice; do not claim savings without a controlled comparison.
+In another activated terminal:
 
-## Completion checkpoint
+```powershell
+python -m scripts.check_integrations
+```
 
-Record passing tests, the reproducible fixture, direct extraction results, and
-one live comparison in LEARNING.md. Commit/push the Phase 4B checkpoint on the
-same Phase 4 branch. BENCHMARKS.csv remains header-only until an actual controlled
-experiment is executed. Full Phase 4 completion also requires the REST integration.
+After that check passes, one paid live trial is:
+
+```powershell
+python -m po_agent
+```
+
+Expected behavior: retrieve the PO, follow its linked invoice ID, get payment
+status, explain the INR 500.00 mismatch, and cite `INV-2001.pdf`, page 1. Earlier
+partial/failed live trials and their measurements are recorded in LEARNING.md.
+The learner supplied the successful request-logging transcript: three Claude
+calls, three successful tools, no tool failures, 4,024 tokens, USD 0.00066040
+estimated cost, and 6.53 seconds overall. The final answer correctly identified
+the INR 500.00 discrepancy, unpaid status, and invoice page reference. Phase 4
+is complete. BENCHMARKS.csv remains header-only; this is a functional trial.
+
+Library references: [PyMuPDF text extraction](https://pymupdf.readthedocs.io/en/latest/recipes-text.html),
+[FastAPI testing](https://fastapi.tiangolo.com/tutorial/testing/),
+[HTTPX transports](https://www.python-httpx.org/advanced/transports/).

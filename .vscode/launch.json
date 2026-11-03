@@ -31,6 +31,32 @@
             "justMyCode": true
         },
         {
+            "name": "Mock payment HTTP service (no Claude)",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "uvicorn",
+            "args": [
+                "po_agent.services.mock_payments:app",
+                "--host", "127.0.0.1",
+                "--port", "8001"
+            ],
+            "python": "${workspaceFolder}/.venv/Scripts/python.exe",
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "All integrations check (no Claude)",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "scripts.check_integrations",
+            "args": ["PO-1001"],
+            "python": "${workspaceFolder}/.venv/Scripts/python.exe",
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
             "name": "Full agent (paid Claude API)",
             "type": "debugpy",
             "request": "launch",

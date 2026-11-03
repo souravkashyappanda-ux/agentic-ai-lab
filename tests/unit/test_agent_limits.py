@@ -151,7 +151,7 @@ def test_two_registered_tools_in_one_round():
     assert json.loads(payment_result["content"])["data"]["payment_status"] == "unpaid"
     schemas = client.messages.create.call_args_list[0].kwargs["tools"]
     assert {schema["name"] for schema in schemas} == {
-        "get_purchase_order", "get_payment_status",
+        "get_purchase_order", "get_payment_status", "read_invoice",
     }
 
 
@@ -183,7 +183,7 @@ def test_truncated_response_does_not_execute_tools():
     )
 
     with patch("po_agent.agent.loop.execute_tool") as execute:
-        with pytest.raises(RuntimeError, match="Unexpected stop reason: max_tokens"):
+        with pytest.raises(RuntimeError, match="per-call output limit"):
             run_agent(client, "Get PO-1001.")
         execute.assert_not_called()
 
@@ -200,7 +200,31 @@ def test_missing_tool_blocks_stops_instead_of_looping():
     client.messages.create.assert_called_once()
 
 
-@pytest.mark.parametrize("limits", [{"max_iterations": 0}, {"max_total_tokens": 0}])
+def test_configurable_output_limit_still_respects_remaining_allowance():
+    client = MagicMock()
+    client.messages.create.return_value = make_response(
+        [{"type": "text", "text": "Done."}], stop_reason="end_turn",
+    )
+    assert run_agent(client, "Check PO.", max_output_tokens=768, max_total_tokens=500) == "Done."
+    assert client.messages.create.call_args.kwargs["max_tokens"] == 500
+
+
+def test_truncated_text_is_labelled_incomplete_without_retry(capsys):
+    client = MagicMock()
+    client.messages.create.return_value = make_response(
+        [{"type": "text", "text": "The invoice total is"}], stop_reason="max_tokens",
+    )
+    with pytest.raises(RuntimeError, match="no automatic retry"):
+        run_agent(client, "Check PO.")
+    client.messages.create.assert_called_once()
+    output = capsys.readouterr().out
+    assert "INCOMPLETE RESPONSE (not a final answer):" in output
+    assert "The invoice total is" in output
+
+
+@pytest.mark.parametrize("limits", [
+    {"max_iterations": 0}, {"max_total_tokens": 0}, {"max_output_tokens": 0},
+])
 def test_invalid_limits_rejected_before_request(limits):
     client = MagicMock()
 

@@ -14,9 +14,9 @@ def get_payment_status(po_id: str) -> dict[str, str | int]:
 PAYMENT_STATUS_TOOL = {
     "name": "get_payment_status",
     "description": (
-        "Look up fictional payment status for a purchase order. "
+        "Retrieve payment status for a purchase order. "
         "Returns payment status, amount paid, and currency. "
-        "Only PO-1001 exists in this demo. Does not make payments."
+        "Does not make payments."
     ),
     "input_schema": {
         "type": "object",
